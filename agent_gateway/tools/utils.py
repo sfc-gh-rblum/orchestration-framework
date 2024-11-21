@@ -179,6 +179,8 @@ def generate_demo_services(session: Session):
     session.file.put_stream(
         pkg_resources.resource_stream(__name__, "data/sp500_semantic_model.yaml"),
         "CUBE_TESTING.PUBLIC.ANALYST/sp500_semantic_model.yaml",
+        auto_compress=False,
+        overwrite=True,
     )
     session.file.put_stream(
         pkg_resources.resource_stream(__name__, "data/sec_chunk_search.parquet"),
