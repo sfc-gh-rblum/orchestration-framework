@@ -364,7 +364,9 @@ class CortexAnalystTool(Tool):
 
                 if query_response == "Invalid Query":
                     lm = dspy.Snowflake(
-                        session=Session.builder.config("connection", self.connection),
+                        session=Session.builder.config(
+                            "connection", self.connection
+                        ).getOrCreate(),
                         model="llama3.2-1b",
                     )
                     dspy.settings.configure(lm=lm)
