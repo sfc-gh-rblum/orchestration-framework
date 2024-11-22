@@ -40,7 +40,7 @@ class AgentGatewayError(Exception):
         super().__init__(self.message)
 
 
-class GatewayAgent:
+class CortexCompleteAgent:
     """Self defined agent for Cortex gateway."""
 
     def __init__(self, session, llm) -> None:
@@ -66,7 +66,7 @@ class GatewayAgent:
                 )
 
                 if "choices" not in response_text:
-                    raise agent_gatewayError(
+                    raise AgentGatewayError(
                         message="Failed Cortex LLM Request. Missing choices in response. See details:{response_text}"
                     )
 
@@ -74,7 +74,7 @@ class GatewayAgent:
                     snowflake_response = self._parse_snowflake_response(response_text)
                     return snowflake_response
                 except:
-                    raise agent_gatewayError(
+                    raise AgentGatewayError(
                         message="Failed Cortex LLM Request. Unable to parse response. See details:{response_text}"
                     )
 
@@ -113,7 +113,7 @@ class GatewayAgent:
 
             return completion
         except KeyError as e:
-            raise agent_gatewayError(
+            raise AgentGatewayError(
                 message=f"Missing Cortex LLM response components. {str(e)}"
             )
 
@@ -160,7 +160,7 @@ class Agent(Chain, extra="allow"):
             planner_stream: Whether to stream the planning.
 
         """
-        super().__init__(name="compiler", **kwargs)
+        super().__init__(name="gateway", **kwargs)
 
         if not planner_example_prompt_replan:
             planner_example_prompt_replan = planner_example_prompt
@@ -174,7 +174,7 @@ class Agent(Chain, extra="allow"):
             stop=planner_stop,
         )
 
-        self.agent = GatewayAgent(session=snowflake_connection, llm=agent_llm)
+        self.agent = CortexCompleteAgent(session=snowflake_connection, llm=agent_llm)
         self.fusion_prompt = fusion_prompt
         self.fusion_prompt_final = fusion_prompt_final or fusion_prompt
         self.planner_stream = planner_stream
