@@ -124,7 +124,11 @@ def parse_log_message(log_message):
             return f"Running {tool_name} {tool_type} Tool..."
 
 
-def generate_demo_services(session: Session):
+def generate_demo_services(session: Session) -> str:
+    # Snowflake changes context after creation of a database or schema. This can cause
+    # issues when creating objects in the newly created database or schema. To avoid this,
+    # we store the initial context and reset it after creating the objects.
+    initial_context = session.get_fully_qualified_current_schema()
     setup_objects = io.StringIO(
         dedent(
             """
@@ -208,3 +212,19 @@ def generate_demo_services(session: Session):
     """
         )
     )
+    session.use_schema(initial_context)
+    return "Demo services created successfully."
+
+
+def teardown_demo_services(session: Session) -> str:
+    teardown_objects = io.StringIO(
+        dedent(
+            """
+        DROP DATABASE IF EXISTS CUBE_TESTING;
+        DROP WAREHOUSE IF EXISTS CUBE_TESTING;
+        """
+        )
+    )
+    con = session.connection
+    deque(con.execute_stream(teardown_objects), maxlen=0)
+    return "Demo objects have been dropped."
