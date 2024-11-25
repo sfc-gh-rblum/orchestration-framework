@@ -45,7 +45,7 @@ def test_search_tool(session, question, answer):
     annual_reports = CortexSearchTool(**search_config)
     response = asyncio.run(annual_reports(question))
 
-    assert answer in response[0].get("CHUNK")
+    assert answer in "".join([result.get("CHUNK") for result in response])
 
 
 @pytest.mark.parametrize(

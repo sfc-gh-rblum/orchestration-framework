@@ -35,4 +35,5 @@ class TestConf:
 def session():
     conf = TestConf()
     generate_demo_services(conf.session)
+    conf.session.use_schema("CUBE_TESTING.PUBLIC")
     yield conf.session
