@@ -326,9 +326,7 @@ class CortexAnalystTool(Tool):
         self.FILE = semantic_model
         self.STAGE = stage
 
-        gateway_logger.log(
-            logging.INFO, "Cortex Analyst Tool successfully initialized"
-        )
+        gateway_logger.log(logging.INFO, "Cortex Analyst Tool successfully initialized")
 
     def __call__(self, prompt) -> Any:
         return self.asearch(query=prompt)
