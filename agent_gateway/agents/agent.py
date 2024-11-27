@@ -16,7 +16,8 @@ import json
 import logging
 from abc import abstractmethod
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
+from collections.abc import Sequence
 
 import yaml
 from chains.llm_chain import LLMChain

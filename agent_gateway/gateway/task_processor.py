@@ -15,7 +15,8 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
-from typing import Any, Callable, Collection, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
+from collections.abc import Collection
 
 from agent_gateway.tools.logger import gateway_logger
 

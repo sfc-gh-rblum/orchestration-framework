@@ -16,7 +16,8 @@ import asyncio
 import json
 import logging
 import re
-from typing import Any, Optional, Sequence, Union
+from typing import Any, Optional, Union
+from collections.abc import Sequence
 from uuid import UUID
 
 from langchain.callbacks.base import AsyncCallbackHandler

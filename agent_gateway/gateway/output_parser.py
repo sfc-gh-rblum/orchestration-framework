@@ -12,7 +12,8 @@
 
 import ast
 import re
-from typing import Any, Sequence, Tuple, Union
+from typing import Any, Tuple, Union
+from collections.abc import Sequence
 
 from langchain.schema import OutputParserException
 
