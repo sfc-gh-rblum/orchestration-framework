@@ -15,7 +15,8 @@ import json
 import logging
 import re
 import threading
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Union, cast
+from collections.abc import Sequence
+from typing import Any, Dict, List, Mapping, Optional, Union, cast
 
 from snowflake.connector.connection import SnowflakeConnection
 from snowflake.snowpark import Session

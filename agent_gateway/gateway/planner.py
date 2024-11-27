@@ -16,11 +16,13 @@ import asyncio
 import json
 import logging
 import re
-from typing import Any, Optional, Sequence, Union
+from collections.abc import Sequence
+from typing import Any, Optional, Union
 from uuid import UUID
 
 from langchain.callbacks.base import AsyncCallbackHandler
 
+from agent_gateway.executors.schema import Plan
 from agent_gateway.gateway.constants import END_OF_PLAN
 from agent_gateway.gateway.output_parser import (
     ACTION_PATTERN,
@@ -29,7 +31,6 @@ from agent_gateway.gateway.output_parser import (
     instantiate_task,
 )
 from agent_gateway.gateway.task_processor import Task
-from agent_gateway.executors.schema import Plan
 from agent_gateway.tools.base import StructuredTool, Tool
 from agent_gateway.tools.logger import gateway_logger
 from agent_gateway.tools.utils import CortexEndpointBuilder, post_cortex_request
