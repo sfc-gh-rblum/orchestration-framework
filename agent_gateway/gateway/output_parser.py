@@ -91,12 +91,13 @@ def _initialize_task_list(matches):
 
 
 def _create_summarization_step(context, index):
-    summarization_prompt = f"Think step by step in order to give me {context} using the following context: ${index}"
+    summarization_prompt = f"Concisely give me {context} ONLY using the following context: ${index}. DO NOT include any other rationale."
     return (
         "I need to concisely summarize the cortex search output",
         str(index + 1),
         "summarize",
         summarization_prompt,
+        "",
     )
 
 
@@ -107,7 +108,7 @@ def _update_task_references(task, index_mapping):
         lambda m: f"${index_mapping.get(m.group(1), m.group(1))}",
         updated_string,
     )
-    return (task[0], task[1], task[2], updated_string)
+    return (task[0], task[1], task[2], updated_string, "")
 
 
 def _update_task_list_with_summarization(matches):
