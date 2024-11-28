@@ -230,7 +230,6 @@ class Planner:
             example_prompt=example_prompt_replan,
             is_replan=True,
         )
-        # self.tools = tools
         self.output_parser = GatewayPlanParser(tools=tools)
         self.stop = stop
 
