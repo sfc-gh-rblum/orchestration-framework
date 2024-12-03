@@ -222,7 +222,7 @@ class Agent(Chain, extra="allow"):
 
         # Extracting the Answer
         answer = self._extract_answer(raw_answer)
-        is_replan = True if FUSION_REPLAN in answer else False
+        is_replan = FUSION_REPLAN in answer
 
         return thought, answer, is_replan
 
