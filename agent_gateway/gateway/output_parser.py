@@ -47,8 +47,6 @@ class GatewayPlanParser:
         self.tools = tools
 
     def parse(self, text: str) -> list[str]:
-        # 1. search("Ronaldo number of kids") -> 1, "search", '"Ronaldo number of kids"'
-        # pattern = r"(\d+)\. (\w+)\(([^)]+)\)"
         pattern = rf"(?:{THOUGHT_PATTERN}\n)?{ACTION_PATTERN}"
         matches = re.findall(pattern, text, re.DOTALL)
         final_matches = _update_task_list_with_summarization(matches)

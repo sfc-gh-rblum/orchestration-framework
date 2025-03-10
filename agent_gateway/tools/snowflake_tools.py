@@ -117,11 +117,6 @@ class CortexSearchTool(Tool):
         return headers, url, data
 
     def _get_citations(self, raw_response: json, search_column: list) -> dict:
-        # iterate through each record
-        # citation_elements = [
-        #     {k: v for k, v in d.items() if k not in search_column and k is not None} for d in raw_response
-        # ]
-
         citation_elements = [
             filtered_dict
             for d in raw_response
