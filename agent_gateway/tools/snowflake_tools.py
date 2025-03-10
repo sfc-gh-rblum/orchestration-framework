@@ -1,21 +1,10 @@
-# Copyright 2024 Snowflake Inc.
-# SPDX-License-Identifier: Apache-2.0
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-# http://www.apache.org/licenses/LICENSE-2.0
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 from __future__ import annotations
 
 import asyncio
 import inspect
 import json
 import re
-from typing import Any, Type, Union
+from typing import Any, Type, Union, List, Dict
 
 from pydantic import BaseModel
 from snowflake.connector.connection import SnowflakeConnection
@@ -32,7 +21,7 @@ from agent_gateway.tools.utils import (
 
 
 class SnowflakeError(Exception):
-    def __init__(self, message):
+    def __init__(self, message: str):
         self.message = message
         gateway_logger.log("ERROR", message)
         super().__init__(self.message)
@@ -42,29 +31,20 @@ class CortexSearchTool(Tool):
     """Cortex Search tool for use with Snowflake Agent Gateway"""
 
     k: int = 5
-    retrieval_columns: list = []
+    retrieval_columns: List[str] = []
     service_name: str = ""
     connection: Union[Session, SnowflakeConnection] = None
 
     def __init__(
         self,
-        service_name,
-        service_topic,
-        data_description,
-        retrieval_columns,
-        snowflake_connection,
-        k=5,
+        service_name: str,
+        service_topic: str,
+        data_description: str,
+        retrieval_columns: List[str],
+        snowflake_connection: Union[Session, SnowflakeConnection],
+        k: int = 5,
     ):
-        """Parameters
-
-        ----------
-        service_name (str): name of the Cortex Search Service to utilize
-        service_topic (str): description of content indexed by Cortex Search.
-        data_description (str): description of the source data that has been indexed.
-        retrieval_columns (list): list of columns to include in Cortex Search results.
-        snowflake_connection (object): snowpark connection object
-        k: number of records to include in results
-        """
+        """Initialize CortexSearchTool with parameters."""
         tool_name = f"{service_name.lower()}_cortexsearch"
         tool_description = self._prepare_search_description(
             name=tool_name,
@@ -80,11 +60,11 @@ class CortexSearchTool(Tool):
         self.service_name = service_name
         gateway_logger.log("INFO", "Cortex Search Tool successfully initialized")
 
-    def __call__(self, question) -> Any:
+    def __call__(self, question: str) -> Any:
         return self.asearch(question)
 
-    async def asearch(self, query):
-        gateway_logger.log("DEBUG", f"Cortex Search Query:{query}")
+    async def asearch(self, query: str) -> Dict[str, Any]:
+        gateway_logger.log("DEBUG", f"Cortex Search Query: {query}")
         headers, url, data = self._prepare_request(query=query)
         response_text = await post_cortex_request(url=url, headers=headers, data=data)
 
@@ -92,14 +72,14 @@ class CortexSearchTool(Tool):
         search_col = self._get_search_column(self.service_name)
         citations = self._get_citations(response_json["results"], search_col)
 
-        gateway_logger.log("DEBUG", f"Cortex Search Response:{response_json}")
+        gateway_logger.log("DEBUG", f"Cortex Search Response: {response_json}")
 
         try:
             return {"chunks": response_json["results"], "sources": citations}
-        except Exception:
-            raise SnowflakeError(message=response_json["message"])
+        except KeyError:
+            raise SnowflakeError(message=response_json.get("message", "Unknown error"))
 
-    def _prepare_request(self, query):
+    def _prepare_request(self, query: str) -> tuple:
         eb = CortexEndpointBuilder(self.connection)
         headers = eb.get_search_headers()
         url = eb.get_search_endpoint(
@@ -116,71 +96,64 @@ class CortexSearchTool(Tool):
 
         return headers, url, data
 
-    def _get_citations(self, raw_response: json, search_column: list) -> dict:
+    def _get_citations(
+        self, raw_response: List[Dict[str, Any]], search_column: List[str]
+    ) -> List[Dict[str, Any]]:
         citation_elements = [
-            filtered_dict
+            {k: v for k, v in d.items() if k and k not in search_column}
             for d in raw_response
-            if (
-                filtered_dict := {
-                    k: v
-                    for k, v in d.items()
-                    if k is not None and k not in search_column
-                }
-            )
         ]
 
-        if len(citation_elements) < 1:
+        if not citation_elements:
             return [self.service_name]
-        else:
-            seen = set()
-            citations = []
-            for c in citation_elements:
-                identifier = tuple(sorted(c.items()))
-                if identifier not in seen:
-                    seen.add(identifier)
-                    citations.append(c)
 
-            return citations
+        seen = set()
+        citations = []
+        for c in citation_elements:
+            identifier = tuple(sorted(c.items()))
+            if identifier not in seen:
+                seen.add(identifier)
+                citations.append(c)
 
-    def _prepare_search_description(self, name, service_topic, data_source_description):
-        base_description = f""""{name}(query: str) -> list:\n
-                 - Executes a search for relevant information about {service_topic}.\n
-                 - Returns a list of relevant passages from {data_source_description}.\n"""
+        return citations
 
-        return base_description
+    def _prepare_search_description(
+        self, name: str, service_topic: str, data_source_description: str
+    ) -> str:
+        return (
+            f""""{name}(query: str) -> list:\n"""
+            f""" - Executes a search for relevant information about {service_topic}.\n"""
+            f""" - Returns a list of relevant passages from {data_source_description}.\n"""
+        )
 
-    def _get_search_column(self, search_service_name) -> list:
+    def _get_search_column(self, search_service_name: str) -> List[str]:
+        return self._get_search_service_attribute(search_service_name, "search_column")
+
+    def _get_search_attributes(self, search_service_name: str) -> List[str]:
+        return self._get_search_service_attribute(
+            search_service_name, "attribute_columns"
+        )
+
+    def _get_search_service_attribute(
+        self, search_service_name: str, attribute: str
+    ) -> List[str]:
         snowflake_connection = Session.builder.config(
             "connection", self.connection
         ).create()
         df = snowflake_connection.sql("SHOW CORTEX SEARCH SERVICES")
         raw_atts = (
             df.where(col('"name"') == search_service_name)
-            .select('"search_column"')
+            .select(f'"{attribute}"')
             .to_pandas()
             .loc[0]
             .values[0]
         )
-        attribute_list = raw_atts.split(",")
+        return raw_atts.split(",")
 
-        return attribute_list
-
-    def _get_search_attributes(self, search_service_name):
-        snowflake_connection = Session.builder.config("connection", self.connection)
-        df = snowflake_connection.sql("SHOW CORTEX SEARCH SERVICES")
-        raw_atts = (
-            df.where(col('"name"') == search_service_name)
-            .select('"attribute_columns"')
-            .to_pandas()
-            .loc[0]
-            .values[0]
-        )
-        attribute_list = raw_atts.split(",")
-
-        return attribute_list
-
-    def _get_search_table(self, search_service_name):
-        snowflake_connection = Session.builder.config("connection", self.connection)
+    def _get_search_table(self, search_service_name: str) -> str:
+        snowflake_connection = Session.builder.config(
+            "connection", self.connection
+        ).create()
         df = snowflake_connection.sql("SHOW CORTEX SEARCH SERVICES")
         table_def = (
             df.where(col('"name"') == search_service_name)
@@ -191,36 +164,33 @@ class CortexSearchTool(Tool):
         )
 
         pattern = r"FROM\s+([\w\.]+)"
-        if match := re.search(pattern, table_def):
-            return match[1]
-        else:
-            print("No match found.")
-
-        return table_def
+        match = re.search(pattern, table_def)
+        return match[1] if match else "No match found."
 
     def _get_sample_values(
-        self, snowflake_connection, cortex_search_service, max_samples=10
-    ):
-        sample_values = {}
-        attributes = self._get_search_attributes(
-            snowflake_connection=snowflake_connection,
-            search_service_name=cortex_search_service,
-        )
-        table_name = self._get_search_table(
-            snowflake_connection=snowflake_connection,
-            search_service_name=cortex_search_service,
-        )
+        self,
+        snowflake_connection: Union[Session, SnowflakeConnection],
+        cortex_search_service: str,
+        max_samples: int = 10,
+    ) -> tuple:
+        attributes = self._get_search_attributes(cortex_search_service)
+        table_name = self._get_search_table(cortex_search_service)
 
-        for attribute in attributes:
-            query = f"""SELECT DISTINCT({attribute}) FROM {table_name} LIMIT {max_samples}"""
-            sample_values[attribute] = list(
-                snowflake_connection.sql(query).to_pandas()[attribute].values
+        sample_values = {
+            attribute: list(
+                snowflake_connection.sql(
+                    f"SELECT DISTINCT({attribute}) FROM {table_name} LIMIT {max_samples}"
+                )
+                .to_pandas()[attribute]
+                .values
             )
+            for attribute in attributes
+        }
 
         return attributes, sample_values
 
 
-def get_min_length(model: Type[BaseModel]):
+def get_min_length(model: Type[BaseModel]) -> int:
     min_length = 0
     for key, field in model.model_fields.items():
         if issubclass(field.annotation, BaseModel):
@@ -230,7 +200,7 @@ def get_min_length(model: Type[BaseModel]):
 
 
 class CortexAnalystTool(Tool):
-    """""Cortex Analyst tool for use with Snowflake Agent Gateway""" ""
+    """Cortex Analyst tool for use with Snowflake Agent Gateway"""
 
     STAGE: str = ""
     FILE: str = ""
@@ -238,21 +208,13 @@ class CortexAnalystTool(Tool):
 
     def __init__(
         self,
-        semantic_model,
-        stage,
-        service_topic,
-        data_description,
-        snowflake_connection,
+        semantic_model: str,
+        stage: str,
+        service_topic: str,
+        data_description: str,
+        snowflake_connection: Union[Session, SnowflakeConnection],
     ):
-        """Parameters
-
-        ----------
-        semantic_model (str): yaml file name containing semantic model for Cortex Analyst
-        stage (str): name of stage containing semantic model yaml.
-        service_topic (str): topic of the data in the tables (i.e S&P500 company financials).
-        data_description (str): description of the source data that has been indexed (i.e a table with stock and financial metrics about S&P500 companies).
-        snowflake_connection (object): snowpark connection object
-        """
+        """Initialize CortexAnalystTool with parameters."""
         tname = semantic_model.replace(".yaml", "") + "_" + "cortexanalyst"
         tool_description = self._prepare_analyst_description(
             name=tname,
@@ -267,29 +229,29 @@ class CortexAnalystTool(Tool):
 
         gateway_logger.log("INFO", "Cortex Analyst Tool successfully initialized")
 
-    def __call__(self, prompt) -> Any:
+    def __call__(self, prompt: str) -> Any:
         return self.asearch(query=prompt)
 
-    async def asearch(self, query):
-        gateway_logger.log("DEBUG", f"Cortex Analyst Prompt:{query}")
+    async def asearch(self, query: str) -> Dict[str, Any]:
+        gateway_logger.log("DEBUG", f"Cortex Analyst Prompt: {query}")
 
         url, headers, data = self._prepare_analyst_request(prompt=query)
 
         response_text = await post_cortex_request(url=url, headers=headers, data=data)
         json_response = json.loads(response_text)
 
-        gateway_logger.log("DEBUG", f"Cortex Analyst Raw Response:{json_response}")
+        gateway_logger.log("DEBUG", f"Cortex Analyst Raw Response: {json_response}")
 
         try:
             query_response = self._process_analyst_message(
                 json_response["message"]["content"]
             )
-        except Exception:
-            raise SnowflakeError(message=json_response["message"])
+        except KeyError:
+            raise SnowflakeError(message=json_response.get("message", "Unknown error"))
 
         return query_response
 
-    def _prepare_analyst_request(self, prompt):
+    def _prepare_analyst_request(self, prompt: str) -> tuple:
         data = {
             "messages": [
                 {"role": "user", "content": [{"type": "text", "text": prompt}]}
@@ -303,62 +265,53 @@ class CortexAnalystTool(Tool):
 
         return url, headers, data
 
-    def _process_analyst_message(self, response):
-        if isinstance(response, list) and len(response) > 0:
-            first_item = response[0]
-
-            if "type" in first_item:
-                if first_item["type"] == "text":
-                    _ = None
-                    for item in response:
-                        _ = item
-                        if item["type"] == "suggestions":
-                            raise SnowflakeError(
-                                message=f"Your request is unclear. Consider rephrasing your request to one of the following suggestions:{item['suggestions']}"
-                            )
-                        elif item["type"] == "sql":
-                            sql_query = item["statement"]
-                            table = (
-                                self.connection.cursor()
-                                .execute(sql_query)
-                                .fetch_arrow_all()
-                            )
-
-                            if table is not None:
-                                tables = self._extract_tables(sql_query)
-
-                                return {
-                                    "output": str(table.to_pydict()),
-                                    "sources": tables,
-                                }
-                            else:
-                                raise SnowflakeError(
-                                    message="No results found. Consider rephrasing your request"
-                                )
-
+    def _process_analyst_message(
+        self, response: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        if response and isinstance(response, list):
+            for item in response:
+                if item["type"] == "suggestions":
                     raise SnowflakeError(
-                        message=f"Unable to generate a valid SQL Query. {_['text']}"
+                        message=f"Your request is unclear. Consider rephrasing your request to one of the following suggestions: {item['suggestions']}"
+                    )
+                elif item["type"] == "sql":
+                    sql_query = item["statement"]
+                    table = (
+                        self.connection.cursor().execute(sql_query).fetch_arrow_all()
                     )
 
-        return SnowflakeError(message="Invalid Cortex Analyst Response")
+                    if table:
+                        tables = self._extract_tables(sql_query)
+                        return {
+                            "output": str(table.to_pydict()),
+                            "sources": tables,
+                        }
+                    else:
+                        raise SnowflakeError(
+                            message="No results found. Consider rephrasing your request"
+                        )
+
+            raise SnowflakeError(
+                message=f"Unable to generate a valid SQL Query. {response[0]['text']}"
+            )
+
+        raise SnowflakeError(message="Invalid Cortex Analyst Response")
 
     def _prepare_analyst_description(
-        self, name, service_topic, data_source_description
-    ):
-        base_analyst_description = f"""{name}(prompt: str) -> str:\n
-                  - takes a user's question about {service_topic} and queries {data_source_description}\n
-                  - Returns the relevant metrics about {service_topic}\n"""
+        self, name: str, service_topic: str, data_source_description: str
+    ) -> str:
+        return (
+            f"""{name}(prompt: str) -> str:\n"""
+            f""" - takes a user's question about {service_topic} and queries {data_source_description}\n"""
+            f""" - Returns the relevant metrics about {service_topic}\n"""
+        )
 
-        return base_analyst_description
-
-    def _extract_tables(self, sql):
-        # Remove SQL comments to avoid false positives
+    def _extract_tables(self, sql: str) -> List[str]:
         cleaned_sql = re.sub(r"--.*", "", sql)  # Strip line comments
         cleaned_sql = re.sub(
             r"/\*.*?\*/", "", cleaned_sql, flags=re.DOTALL
         )  # Strip block comments
 
-        # Extract CTE names if present
         cte_names = set()
         if re.search(r"^\s*WITH\s+", cleaned_sql, re.IGNORECASE | re.MULTILINE):
             cte_matches = re.findall(
@@ -366,20 +319,19 @@ class CortexAnalystTool(Tool):
             )
             cte_names.update(cte_matches)
 
-        # Find all table references in FROM clauses
         from_tables = re.findall(r"\bFROM\s+([^\s\(\)\,]+)", cleaned_sql, re.IGNORECASE)
-
-        # Filter out CTE aliases and deduplicate
         tables = [table for table in from_tables if table not in cte_names]
-        unique_tables = sorted(list(set(tables)))
-
-        return unique_tables
+        return sorted(set(tables))
 
 
 class PythonTool(Tool):
-    def __init__(self, python_func, tool_description, output_description) -> None:
-        self.python_callable = self.asyncify(python_func)
-        self.desc = self._generate_description(
+    python_callable: object = None
+
+    def __init__(
+        self, python_func: callable, tool_description: str, output_description: str
+    ) -> None:
+        python_callable = self.asyncify(python_func)
+        desc = self._generate_description(
             python_func=python_func,
             tool_description=tool_description,
             output_description=output_description,
@@ -390,25 +342,28 @@ class PythonTool(Tool):
 
         gateway_logger.log("INFO", "Python Tool successfully initialized")
 
+    def asyncify(self, sync_func: callable) -> callable:
     def __call__(self, *args):
         return self.python_callable(*args)
 
     def asyncify(self, sync_func):
         async def async_func(*args, **kwargs):
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             result = await loop.run_in_executor(None, sync_func, *args, **kwargs)
             return {
                 "output": result,
-                "sources": [f"{self.python_callable.__name__} tool"],
+                "sources": [f"{sync_func.__name__} tool"],
             }
 
         return async_func
 
-    def _generate_description(self, python_func, tool_description, output_description):
+    def _generate_description(
+        self, python_func: callable, tool_description: str, output_description: str
+    ) -> str:
         full_sig = self._process_full_signature(python_func=python_func)
         return f"""{full_sig}\n - {tool_description}\n - {output_description}"""
 
-    def _process_full_signature(self, python_func):
+    def _process_full_signature(self, python_func: callable) -> str:
         name = python_func.__name__
         signature = str(inspect.signature(python_func))
         return name + signature
