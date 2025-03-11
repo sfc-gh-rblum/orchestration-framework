@@ -320,8 +320,8 @@ class CortexAnalystTool(Tool):
             cte_names.update(cte_matches)
 
         from_tables = re.findall(r"\bFROM\s+([^\s\(\)\,]+)", cleaned_sql, re.IGNORECASE)
-        tables = [table for table in from_tables if table not in cte_names]
-        return sorted(set(tables))
+        tables = [{"TABLE": table} for table in from_tables if table not in cte_names]
+        return tables
 
 
 class PythonTool(Tool):
@@ -352,7 +352,7 @@ class PythonTool(Tool):
             result = await loop.run_in_executor(None, sync_func, *args, **kwargs)
             return {
                 "output": result,
-                "sources": [f"{sync_func.__name__} tool"],
+                "sources": [{"Custom Tools": f"{sync_func.__name__} tool"}],
             }
 
         return async_func
