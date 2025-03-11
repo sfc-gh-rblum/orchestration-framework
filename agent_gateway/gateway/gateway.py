@@ -343,19 +343,17 @@ class Agent:
             if not raw_matches:
                 return None
 
-            # Flatten the nested lists into a single list of dictionaries
             flattened_records = [
                 record for sublist in raw_matches for record in sublist
             ]
-
-            # Extract all unique keys from flattened records
-            all_keys = set().union(*(record.keys() for record in flattened_records))
-
-            # Initialize sources dictionary with empty lists for each key
+            unique_matches = [
+                dict(t) for t in {tuple(d.items()) for d in flattened_records}
+            ]
+            all_keys = set().union(*(record.keys() for record in unique_matches))
             sources = {key: [] for key in all_keys}
 
             # Populate sources with values or None if missing
-            for record in flattened_records:
+            for record in unique_matches:
                 for key in all_keys:
                     sources[key].append(record.get(key))
 
