@@ -337,24 +337,6 @@ class Agent:
         return thought, answer, sources, is_replan
 
     def _extract_sources(self, text):
-        raw_matches = self._parse_sources(text)
-        if not raw_matches:
-            return None
-
-        sources = set()
-
-        for raw_match in raw_matches:
-            try:
-                parsed_sources = ast.literal_eval(raw_match)
-                if isinstance(parsed_sources, list):
-                    for src in parsed_sources:
-                        sources.add(self.source_to_string(src))
-            except (ValueError, SyntaxError):
-                continue
-
-        return list(sources) if sources else None
-
-    def _extract_sources(self, text):
         try:
             raw_matches = self._parse_sources(text)
             gateway_logger.log("DEBUG",f"RAW MATCHES:{raw_matches[0]}")
