@@ -339,24 +339,25 @@ class Agent:
     def _extract_sources(self, text):
         try:
             raw_matches = self._parse_sources(text)
-            
+
             if not raw_matches:
                 return None
 
-            # get all keys
-            all_keys = set().union(*(d.keys() for d in raw_matches[0]))
+            # Flatten the nested lists into a single list of dictionaries
+            flattened_records = [
+                record for sublist in raw_matches for record in sublist
+            ]
 
-            # initialize new_src dict with empty lists
+            # Extract all unique keys from flattened records
+            all_keys = set().union(*(record.keys() for record in flattened_records))
+
+            # Initialize sources dictionary with empty lists for each key
             sources = {key: [] for key in all_keys}
 
-            for src in raw_matches[0]:
-
-                for k,v, in src.items():
-                    sources[k].append(v)
-
-                set_none = list(set(sources.keys())-set(src.keys()))
-                for key in set_none:
-                    sources[key].append(None)
+            # Populate sources with values or None if missing
+            for record in flattened_records:
+                for key in all_keys:
+                    sources[key].append(record.get(key))
 
         except (ValueError, SyntaxError) as e:
             raise e
