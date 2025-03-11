@@ -339,7 +339,6 @@ class Agent:
     def _extract_sources(self, text):
         try:
             raw_matches = self._parse_sources(text)
-            gateway_logger.log("DEBUG",f"RAW MATCHES:{raw_matches[0]}")
             
             if not raw_matches:
                 return None
