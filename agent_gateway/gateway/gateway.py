@@ -357,7 +357,7 @@ class Agent:
     def source_to_string(self, src):
         if isinstance(src, dict):
             # Sort keys alphabetically for consistency, then format as key: value pairs
-            return ", ".join(f"{key}: {src[key]}" for key in sorted(src))
+            return ", ".join(f"{key}: {src[key]}" for key in src)
         return str(src)
 
     def _parse_sources(self, text):
