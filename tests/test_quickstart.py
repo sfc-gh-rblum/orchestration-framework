@@ -43,9 +43,12 @@ def test_search_tool(session, question, answer):
         "snowflake_connection": session,
     }
     annual_reports = CortexSearchTool(**search_config)
-    response = asyncio.run(annual_reports(question))
+    response = [
+        chunk.get("CHUNK")
+        for chunk in asyncio.run(annual_reports(question)).get("chunks")
+    ]
 
-    assert answer in "".join([result.get("CHUNK") for result in response])
+    assert answer in response
 
 
 @pytest.mark.parametrize(
@@ -72,7 +75,7 @@ def test_analyst_tool(session, question, answer):
         "snowflake_connection": session,
     }
     sp500 = CortexAnalystTool(**analyst_config)
-    response = asyncio.run(sp500(question))
+    response = asyncio.run(sp500(question)).get("output")
 
     assert response == answer
 
@@ -89,7 +92,9 @@ def test_python_tool():
         "python_func": get_news,
     }
     news_search = PythonTool(**python_config)
-    response = asyncio.run(news_search("When is Apple releasing a new chip?"))
+    response = asyncio.run(news_search("When is Apple releasing a new chip?")).get(
+        "output"
+    )
     assert get_news(None) == response
 
 
@@ -140,7 +145,7 @@ def test_gateway_agent(session, question, answer_contains):
     agent = Agent(
         snowflake_connection=session, tools=[annual_reports, sp500, news_search]
     )
-    response = agent(question)
+    response = agent(question).get("output")
     assert answer_contains in response
 
 
@@ -193,5 +198,5 @@ def test_gateway_agent_without_memory(session, question, answer_contains):
         tools=[annual_reports, sp500, news_search],
         memory=False,
     )
-    response = agent(question)
+    response = json.loads(agent(question)).get("output")
     assert answer_contains in response
