@@ -354,16 +354,42 @@ class Agent:
 
         return list(sources) if sources else None
 
-    def source_to_string(self, src):
-        if isinstance(src, dict):
-            # Sort keys alphabetically for consistency, then format as key: value pairs
-            return ", ".join(f"{key}: {src[key]}" for key in src)
-        return str(src)
+    def _extract_sources(self, text):
+        try:
+            raw_matches = self._parse_sources(text)
+            gateway_logger.log("DEBUG",f"RAW MATCHES:{raw_matches[0]}")
+            
+            if not raw_matches:
+                return None
+
+            # get all keys
+            all_keys = set().union(*(d.keys() for d in raw_matches[0]))
+
+            # initialize new_src dict with empty lists
+            sources = {key: [] for key in all_keys}
+
+            for src in raw_matches[0]:
+
+                for k,v, in src.items():
+                    sources[k].append(v)
+
+                set_none = list(set(sources.keys())-set(src.keys()))
+                for key in set_none:
+                    sources[key].append(None)
+
+        except (ValueError, SyntaxError) as e:
+            raise e
+
+        return sources if sources else None
 
     def _parse_sources(self, text):
         pattern = r"'sources':\s*(\[[^\]]*\])"
         matches = re.findall(pattern, text, re.DOTALL)
-        return matches if matches else None
+
+        if matches is not None:
+            return [ast.literal_eval(match) for match in matches]
+        else:
+            return None
 
     def _call(self, inputs):
         return self.__call__(inputs)
