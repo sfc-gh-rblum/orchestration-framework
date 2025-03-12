@@ -346,9 +346,16 @@ class Agent:
             flattened_records = [
                 record for sublist in raw_matches for record in sublist
             ]
-            unique_matches = [
-                dict(t) for t in {tuple(d.items()) for d in flattened_records}
-            ]
+
+            # filter to unique sources and preserve order
+            seen = set()
+            unique_matches = []
+            for record in flattened_records:
+                record_tuple = tuple(record.items())
+                if record_tuple not in seen:
+                    unique_matches.append(record)
+                    seen.add(record_tuple)
+
             all_keys = set().union(*(record.keys() for record in unique_matches))
             sources = {key: [] for key in all_keys}
 
