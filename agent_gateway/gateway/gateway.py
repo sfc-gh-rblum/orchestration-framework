@@ -272,9 +272,6 @@ class Agent:
             "sufficient information."
         )
 
-    def _parse_sources(self, tasks):
-        pass
-
     def _generate_context_for_replanner(
         self, tasks: Mapping[int, Task], fusion_thought: str
     ) -> str:
