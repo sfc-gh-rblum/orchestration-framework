@@ -334,24 +334,24 @@ class Agent:
         return thought, answer, sources, is_replan
 
     def _extract_sources(self, text):
-        
         try:
             raw_matches = self._parse_sources(text)
-            gateway_logger.log("DEBUG",f"RAW MATCH:{raw_matches}")
 
             if not raw_matches:
                 return None
-            
+
             seen = set()
             unique_matches = []
-            
+
             def make_hashable(obj):
                 """Recursively convert lists/dictionaries to hashable types."""
                 if isinstance(obj, list):
                     return tuple(make_hashable(item) for item in obj)
                 elif isinstance(obj, dict):
-                    return tuple((key, make_hashable(value)) for key, value in obj.items())
-                return obj 
+                    return tuple(
+                        (key, make_hashable(value)) for key, value in obj.items()
+                    )
+                return obj
 
             for record in raw_matches:
                 # Convert the entire record to a hashable type
@@ -365,10 +365,9 @@ class Agent:
                 source_entry = {
                     "tool_type": record.get("tool_type"),
                     "tool_name": record.get("tool_name"),
-                    "metadata": record.get("metadata", {})
+                    "metadata": record.get("metadata", {}),
                 }
                 sources.append(source_entry)
-
 
         except (ValueError, SyntaxError) as e:
             raise e
@@ -395,7 +394,7 @@ class Agent:
                 source_entry = {
                     "tool_type": sources_dict.get("tool_type"),
                     "tool_name": sources_dict.get("tool_name"),
-                    "metadata": metadata
+                    "metadata": metadata,
                 }
 
                 # Avoid duplicates
@@ -548,6 +547,9 @@ class Agent:
                 self.memory_context.append({"Question:": input, "Answer": answer})
 
         if is_replan and is_final_iter:
-            return {"output":f"{answer} \n Unable to respond to your request with the available information in the system.  Consider rephrasing your request or providing additional tools.","sources":None}
+            return {
+                "output": f"{answer} \n Unable to respond to your request with the available information in the system.  Consider rephrasing your request or providing additional tools.",
+                "sources": None,
+            }
         else:
             return {"output": answer, "sources": sources}
