@@ -130,7 +130,7 @@ async def post_cortex_request(url: str, headers: Headers, data: dict):
 
 def asyncify(self, sync_func):
     async def async_func(*args, **kwargs):
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, sync_func, *args, **kwargs)
 
     return async_func

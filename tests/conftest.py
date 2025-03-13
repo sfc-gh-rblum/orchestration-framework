@@ -14,6 +14,8 @@ import os
 
 import pytest
 from snowflake.snowpark import Session
+from dotenv import load_dotenv
+load_dotenv()
 
 from agent_gateway.tools.utils import generate_demo_services
 

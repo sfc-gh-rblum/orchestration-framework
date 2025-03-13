@@ -154,7 +154,7 @@ ENABLED = true;
 
 #### Does the Agent Gateway work with a Streamlit UI?
 
-- Yes, see the [demo app](https://github.com/Snowflake-Labs/orchestration-framework/blob/main/demo_app/demo_app.py) for an example Streamlit app that uses the Agent Gateway for orchestration across Cortex Search, Cortex Analyst, and Python tools. Note, running the gateway is not yet supported in Stremlit in Snowflake.
+- Yes, see the [demo app](https://github.com/Snowflake-Labs/orchestration-framework/blob/main/demo_app/demo_app.py) for an example Streamlit app that uses the Agent Gateway for orchestration across Cortex Search, Cortex Analyst, and Python tools. Note, running the gateway is not yet supported in Streamlit in Snowflake.
 
 #### How does authentication work?
 

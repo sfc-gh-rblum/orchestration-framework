@@ -32,3 +32,8 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["agent_gateway"]
+
+[dependency-groups]
+dev = [
+    "ipython>=8.18.1",
+]
