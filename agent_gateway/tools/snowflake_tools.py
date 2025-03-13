@@ -105,7 +105,7 @@ class CortexSearchTool(Tool):
         ]
 
         if len(citation_elements[0].keys())<1:
-            return [self.service_name]
+            return [{"Search Tool":self.service_name}]
 
         seen = set()
         citations = []
@@ -320,7 +320,7 @@ class CortexAnalystTool(Tool):
             cte_names.update(cte_matches)
 
         from_tables = re.findall(r"\bFROM\s+([^\s\(\)\,]+)", cleaned_sql, re.IGNORECASE)
-        tables = [{"TABLE": table} for table in from_tables if table not in cte_names]
+        tables = [{"Table": table} for table in from_tables if table not in cte_names]
         return tables
 
 
