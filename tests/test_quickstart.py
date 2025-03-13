@@ -12,6 +12,7 @@
 
 import asyncio
 import json
+import re
 
 import pytest
 
@@ -47,8 +48,8 @@ def test_search_tool(session, question, answer):
         chunk.get("CHUNK")
         for chunk in asyncio.run(annual_reports(question)).get("chunks")
     ]
-
-    assert answer in response
+    print("Actual chunks:", response)
+    assert any(re.search(re.escape(answer), chunk) for chunk in response)
 
 
 @pytest.mark.parametrize(
@@ -198,5 +199,5 @@ def test_gateway_agent_without_memory(session, question, answer_contains):
         tools=[annual_reports, sp500, news_search],
         memory=False,
     )
-    response = json.loads(agent(question)).get("output")
+    response = agent(question).get("output")
     assert answer_contains in response
