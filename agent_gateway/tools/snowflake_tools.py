@@ -104,7 +104,7 @@ class CortexSearchTool(Tool):
             for d in raw_response
         ]
 
-        if not citation_elements:
+        if len(citation_elements[0].keys())<1:
             return [self.service_name]
 
         seen = set()
@@ -325,22 +325,20 @@ class CortexAnalystTool(Tool):
 
 
 class PythonTool(Tool):
-    python_callable: object = None
 
     def __init__(
         self, python_func: callable, tool_description: str, output_description: str
     ) -> None:
-        self.asyncify(python_func)
-        self._generate_description(
+       self.python_callable = self.asyncify(python_func)
+       self.desc = self._generate_description(
             python_func=python_func,
             tool_description=tool_description,
             output_description=output_description,
         )
-        super().__init__(
+       super().__init__(
             name=python_func.__name__, func=self.python_callable, description=self.desc
         )
-
-        gateway_logger.log("INFO", "Python Tool successfully initialized")
+       gateway_logger.log("INFO", "Python Tool successfully initialized")
 
     def __call__(self, *args):
         return self.python_callable(*args)
