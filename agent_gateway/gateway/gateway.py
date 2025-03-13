@@ -351,7 +351,7 @@ class Agent:
                     return tuple(make_hashable(item) for item in obj)
                 elif isinstance(obj, dict):
                     return tuple((key, make_hashable(value)) for key, value in obj.items())
-                return obj  # Return the object as-is if it's already hashable
+                return obj 
 
             for record in raw_matches:
                 # Convert the entire record to a hashable type
@@ -403,7 +403,7 @@ class Agent:
                     sources_list.append(source_entry)
 
             except (ValueError, SyntaxError):
-                continue  # Skip invalid matches
+                continue
 
         return sources_list if sources_list else None
 
