@@ -53,6 +53,8 @@ OUTPUT_PROMPT = (
     "  - Action should be Finish if you have enough information to answer the question\n"
     "  - Action Should be Replan if you don't have enough information to answer the question\n"
     "  - You must say <END_OF_RESPONSE> at the end of your response.\n"
+    "  - If the user's question is too vague say why and ask for clarification.\n"
+    "  - If none of the provided tools can be used to answer the user's question, say so.\n"
     "\n"
     "\n"
     "Here are some examples:\n"

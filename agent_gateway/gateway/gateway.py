@@ -334,32 +334,41 @@ class Agent:
         return thought, answer, sources, is_replan
 
     def _extract_sources(self, text):
+        
         try:
             raw_matches = self._parse_sources(text)
+            gateway_logger.log("DEBUG",f"RAW MATCH:{raw_matches}")
 
             if not raw_matches:
                 return None
-
-            flattened_records = [
-                record for sublist in raw_matches for record in sublist
-            ]
-
-            # filter to unique sources and preserve order
+            
             seen = set()
             unique_matches = []
-            for record in flattened_records:
-                record_tuple = tuple(record.items())
+            
+            def make_hashable(obj):
+                """Recursively convert lists/dictionaries to hashable types."""
+                if isinstance(obj, list):
+                    return tuple(make_hashable(item) for item in obj)
+                elif isinstance(obj, dict):
+                    return tuple((key, make_hashable(value)) for key, value in obj.items())
+                return obj  # Return the object as-is if it's already hashable
+
+            for record in raw_matches:
+                # Convert the entire record to a hashable type
+                record_tuple = make_hashable(record)
                 if record_tuple not in seen:
                     unique_matches.append(record)
                     seen.add(record_tuple)
 
-            all_keys = set().union(*(record.keys() for record in unique_matches))
-            sources = {key: [] for key in all_keys}
-
-            # Populate sources with values or None if missing
+            sources = []
             for record in unique_matches:
-                for key in all_keys:
-                    sources[key].append(record.get(key))
+                source_entry = {
+                    "tool_type": record.get("tool_type"),
+                    "tool_name": record.get("tool_name"),
+                    "metadata": record.get("metadata", {})
+                }
+                sources.append(source_entry)
+
 
         except (ValueError, SyntaxError) as e:
             raise e
@@ -367,13 +376,36 @@ class Agent:
         return sources if sources else None
 
     def _parse_sources(self, text):
-        pattern = r"'sources':\s*(\[[^\]]*\])"
+        pattern = r"'sources':\s*(\{(?:[^{}]|(?:\{[^{}]*\}))*\})"
         matches = re.findall(pattern, text, re.DOTALL)
 
-        if matches is not None:
-            return [ast.literal_eval(match) for match in matches]
-        else:
+        if not matches:
             return None
+
+        sources_list = []
+
+        for match in matches:
+            try:
+                sources_dict = ast.literal_eval(match)
+
+                metadata = sources_dict.get("metadata", [])
+                if not isinstance(metadata, list):
+                    metadata = [metadata]
+
+                source_entry = {
+                    "tool_type": sources_dict.get("tool_type"),
+                    "tool_name": sources_dict.get("tool_name"),
+                    "metadata": metadata
+                }
+
+                # Avoid duplicates
+                if source_entry not in sources_list:
+                    sources_list.append(source_entry)
+
+            except (ValueError, SyntaxError):
+                continue  # Skip invalid matches
+
+        return sources_list if sources_list else None
 
     def _call(self, inputs):
         return self.__call__(inputs)
@@ -515,7 +547,7 @@ class Agent:
             if len(self.memory_context) <= max_memory:
                 self.memory_context.append({"Question:": input, "Answer": answer})
 
-        if ~is_replan and is_final_iter:
-            return f"{answer} Unable to respond to your request with the available tools.  Consider rephrasing your request or providing additional tools."
+        if is_replan and is_final_iter:
+            return {"output":f"{answer} \n Unable to respond to your request with the available information in the system.  Consider rephrasing your request or providing additional tools.","sources":None}
         else:
             return {"output": answer, "sources": sources}

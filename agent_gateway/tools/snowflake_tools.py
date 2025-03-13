@@ -75,7 +75,10 @@ class CortexSearchTool(Tool):
         gateway_logger.log("DEBUG", f"Cortex Search Response: {response_json}")
 
         try:
-            return {"chunks": response_json["results"], "sources": citations}
+            return {"output": response_json["results"],
+                     "sources": {"tool_type":"cortex_search",
+                                 "tool_name":self.name,
+                                 "metadata":citations}}
         except KeyError:
             raise SnowflakeError(message=response_json.get("message", "Unknown error"))
 
@@ -284,7 +287,9 @@ class CortexAnalystTool(Tool):
                         tables = self._extract_tables(sql_query)
                         return {
                             "output": str(table.to_pydict()),
-                            "sources": tables,
+                            "sources": {"tool_type":"cortex_analyst",
+                                        "tool_name":self.name,
+                                        "metadata":tables},
                         }
                     else:
                         raise SnowflakeError(
@@ -349,7 +354,11 @@ class PythonTool(Tool):
             result = await loop.run_in_executor(None, sync_func, *args, **kwargs)
             return {
                 "output": result,
-                "sources": [{"Custom Tools": f"{sync_func.__name__} tool"}],
+                "sources": {
+                    "tool_type":"custom_tool",
+                    "tool_name":sync_func.__name__,
+                    "metadata":None
+                },
             }
 
         return async_func

@@ -46,7 +46,7 @@ def test_search_tool(session, question, answer):
     annual_reports = CortexSearchTool(**search_config)
     response = [
         chunk.get("CHUNK")
-        for chunk in asyncio.run(annual_reports(question)).get("chunks")
+        for chunk in asyncio.run(annual_reports(question)).get("output")
     ]
     print("Actual chunks:", response)
     assert any(re.search(re.escape(answer), chunk) for chunk in response)
