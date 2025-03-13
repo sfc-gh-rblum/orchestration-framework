@@ -330,8 +330,8 @@ class PythonTool(Tool):
     def __init__(
         self, python_func: callable, tool_description: str, output_description: str
     ) -> None:
-        python_callable = self.asyncify(python_func)
-        desc = self._generate_description(
+        self.asyncify(python_func)
+        self._generate_description(
             python_func=python_func,
             tool_description=tool_description,
             output_description=output_description,
@@ -342,7 +342,6 @@ class PythonTool(Tool):
 
         gateway_logger.log("INFO", "Python Tool successfully initialized")
 
-    def asyncify(self, sync_func: callable) -> callable:
     def __call__(self, *args):
         return self.python_callable(*args)
 
