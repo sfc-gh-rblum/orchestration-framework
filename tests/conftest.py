@@ -13,9 +13,8 @@
 import os
 
 import pytest
-from snowflake.snowpark import Session
 from dotenv import load_dotenv
-load_dotenv()
+from snowflake.snowpark import Session
 
 from agent_gateway.tools.utils import generate_demo_services
 
@@ -25,6 +24,7 @@ class TestConf:
         self.session = self.connect()
 
     def connect(self):
+        load_dotenv()
         connection_params = {
             k.replace("SNOWFLAKE_", "").lower(): v
             for k, v in os.environ.items()

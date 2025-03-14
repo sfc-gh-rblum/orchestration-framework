@@ -18,7 +18,6 @@ from typing import Any, Tuple, Union
 
 from agent_gateway.gateway.task_processor import Task
 from agent_gateway.tools.base import StructuredTool, Tool
-
 from agent_gateway.tools.logger import gateway_logger
 
 THOUGHT_PATTERN = r"Thought: ([^\n]*)"
