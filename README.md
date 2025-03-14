@@ -24,7 +24,7 @@ This library is optimized for client-side orchestration. If you prefer a managed
 
 In a new virtual environment with Python 3.10 or 3.11, install the latest version of this framework.
 ```sh
-pip install orchestration-framework@git+https://github.com/Snowflake-Labs/orchestration-framework.git
+pip install orchestration-framework
 ```
 
 **Note For Mac Users**: Mac users have reported SSL Certificate issues when using the
