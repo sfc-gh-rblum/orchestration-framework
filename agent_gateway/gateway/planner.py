@@ -32,7 +32,11 @@ from agent_gateway.gateway.task_processor import Task
 from agent_gateway.tools.base import StructuredTool, Tool
 from agent_gateway.tools.logger import gateway_logger
 from agent_gateway.tools.schema import Plan
-from agent_gateway.tools.utils import CortexEndpointBuilder, post_cortex_request
+from agent_gateway.tools.utils import (
+    CortexEndpointBuilder,
+    post_cortex_request,
+    _determine_runtime,
+)
 
 
 class AgentGatewayError(Exception):
@@ -209,14 +213,14 @@ class Planner:
         headers, url, data = self._prepare_llm_request(prompt=message)
         response_text = await post_cortex_request(url=url, headers=headers, data=data)
 
-        if "choices" not in response_text:
-            raise AgentGatewayError(
-                message=f"Failed Cortex LLM Request. Missing choices in response. See details:{response_text}"
-            )
-
         try:
+            if _determine_runtime():
+                response_text = json.loads(response_text).get("content")
+
             snowflake_response = self._parse_snowflake_response(response_text)
+
             return snowflake_response
+
         except Exception:
             raise AgentGatewayError(
                 message=f"Failed Cortex LLM Request. Unable to parse response. See details:{response_text}"
@@ -231,23 +235,31 @@ class Planner:
         return headers, url, data
 
     def _parse_snowflake_response(self, data_str):
-        json_objects = data_str.split("\ndata: ")
+        gateway_logger.log("DEBUG", f"parser input:{type(data_str)}")
+
         json_list = []
 
-        # Iterate over each JSON object
-        for obj in json_objects:
-            obj = obj.strip()
-            if obj:
-                # Remove the 'data: ' prefix if it exists
-                if obj.startswith("data: "):
-                    obj = obj[6:]
-                # Load the JSON object into a Python dictionary
-                json_dict = json.loads(str(obj))
-                # Append the JSON dictionary to the list
-                json_list.append(json_dict)
+        if _determine_runtime():
+            json_list = [i["data"] for i in json.loads(data_str)]
+
+        else:
+            json_objects = data_str.split("\ndata: ")
+
+            # Iterate over each object
+            for obj in json_objects:
+                obj = obj.strip()
+                if obj:
+                    # Remove the 'data: ' prefix if it exists
+                    if obj.startswith("data: "):
+                        obj = obj[6:]
+                    # Load the JSON object into a Python dictionary
+                    json_dict = json.loads(str(obj))
+                    # Append the JSON dictionary to the list
+                    json_list.append(json_dict)
 
         completion = ""
         choices = {}
+
         for chunk in json_list:
             choices = chunk["choices"][0]
 

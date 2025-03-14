@@ -17,6 +17,7 @@ from agent_gateway.tools.utils import (
     CortexEndpointBuilder,
     _get_connection,
     post_cortex_request,
+    _determine_runtime,
 )
 
 
@@ -69,22 +70,30 @@ class CortexSearchTool(Tool):
         response_text = await post_cortex_request(url=url, headers=headers, data=data)
 
         response_json = json.loads(response_text)
-        search_col = self._get_search_column(self.service_name)
-        citations = self._get_citations(response_json["results"], search_col)
-
-        gateway_logger.log("DEBUG", f"Cortex Search Response: {response_json}")
 
         try:
-            return {
-                "output": response_json["results"],
-                "sources": {
-                    "tool_type": "cortex_search",
-                    "tool_name": self.name,
-                    "metadata": citations,
-                },
-            }
+            if _determine_runtime():
+                search_response = json.loads(response_json["content"])["results"]
+            else:
+                search_response = response_json["results"]
         except KeyError:
-            raise SnowflakeError(message=response_json.get("message", "Unknown error"))
+            raise SnowflakeError(
+                message=f"unable to parse Cortex Search response {search_response.get('message', 'Unknown error')}"
+            )
+
+        search_col = self._get_search_column(self.service_name)
+        citations = self._get_citations(search_response, search_col)
+
+        gateway_logger.log("DEBUG", f"Cortex Search Response: {search_response}")
+
+        return {
+            "output": search_response,
+            "sources": {
+                "tool_type": "cortex_search",
+                "tool_name": self.name,
+                "metadata": citations,
+            },
+        }
 
     def _prepare_request(self, query: str) -> tuple:
         eb = CortexEndpointBuilder(self.connection)
@@ -250,13 +259,19 @@ class CortexAnalystTool(Tool):
         gateway_logger.log("DEBUG", f"Cortex Analyst Raw Response: {json_response}")
 
         try:
-            query_response = self._process_analyst_message(
-                json_response["message"]["content"]
-            )
+            if _determine_runtime() and isinstance(json_response["content"], str):
+                json_response["content"] = json.loads(json_response["content"])
+                query_response = self._process_analyst_message(
+                    json_response["content"]["message"]["content"]
+                )
+            else:
+                x = json_response["message"]["content"]
+                query_response = self._process_analyst_message(x)
+
+            return query_response
+
         except KeyError:
             raise SnowflakeError(message=json_response.get("message", "Unknown error"))
-
-        return query_response
 
     def _prepare_analyst_request(self, prompt: str) -> tuple:
         data = {
