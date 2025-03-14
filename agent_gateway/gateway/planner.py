@@ -235,8 +235,6 @@ class Planner:
         return headers, url, data
 
     def _parse_snowflake_response(self, data_str):
-        gateway_logger.log("DEBUG", f"parser input:{type(data_str)}")
-
         json_list = []
 
         if _determine_runtime():
