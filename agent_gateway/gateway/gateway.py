@@ -31,7 +31,11 @@ from agent_gateway.tools.snowflake_prompts import OUTPUT_PROMPT
 from agent_gateway.tools.snowflake_prompts import (
     PLANNER_PROMPT as SNOWFLAKE_PLANNER_PROMPT,
 )
-from agent_gateway.tools.utils import CortexEndpointBuilder, post_cortex_request
+from agent_gateway.tools.utils import (
+    CortexEndpointBuilder,
+    post_cortex_request,
+    _determine_runtime,
+)
 
 
 class AgentGatewayError(Exception):
@@ -62,14 +66,12 @@ class CortexCompleteAgent:
                 message=f"Failed Cortex LLM Request. See details:{str(e)}"
             ) from e
 
-        if "choices" not in response_text:
-            raise AgentGatewayError(
-                message=f"Invalid Cortex LLM Response. See details:{response_text}"
-            )
-
         try:
+            if _determine_runtime():
+                response_text = json.loads(response_text).get("content")
+
             snowflake_response = self._parse_snowflake_response(response_text)
-            gateway_logger.log("DEBUG", f"RAW COMPLETE RESPONSE: {snowflake_response}")
+
             return snowflake_response
         except Exception:
             raise AgentGatewayError(
@@ -86,20 +88,25 @@ class CortexCompleteAgent:
 
     def _parse_snowflake_response(self, data_str):
         try:
-            json_objects = data_str.split("\ndata: ")
             json_list = []
 
-            # Iterate over each JSON object
-            for obj in json_objects:
-                obj = obj.strip()
-                if obj:
-                    # Remove the 'data: ' prefix if it exists
-                    if obj.startswith("data: "):
-                        obj = obj[6:]
-                    # Load the JSON object into a Python dictionary
-                    json_dict = json.loads(obj, strict=False)
-                    # Append the JSON dictionary to the list
-                    json_list.append(json_dict)
+            if _determine_runtime():
+                json_list = [i["data"] for i in json.loads(data_str)]
+
+            else:
+                json_objects = data_str.split("\ndata: ")
+
+                # Iterate over each object
+                for obj in json_objects:
+                    obj = obj.strip()
+                    if obj:
+                        # Remove the 'data: ' prefix if it exists
+                        if obj.startswith("data: "):
+                            obj = obj[6:]
+                        # Load the JSON object into a Python dictionary
+                        json_dict = json.loads(str(obj))
+                        # Append the JSON dictionary to the list
+                        json_list.append(json_dict)
 
             completion = ""
             choices = {}
@@ -424,7 +431,7 @@ class Agent:
 
         if error:
             gateway_logger.log("DEBUG", f"ERROR NoneType: {error}")
-            gateway_logger.log("DEBUG", f"NONETYPe result: {result}")
+            gateway_logger.log("DEBUG", f"ERROR RESULT: {result}")
             raise AgentGatewayError(message=str(error[0]))
 
         if not result:

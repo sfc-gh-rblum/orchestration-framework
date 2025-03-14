@@ -16,10 +16,12 @@ import os
 import pprint
 import sys
 
+from agent_gateway.tools.utils import _determine_runtime
+
 # Global variable to toggle logging
 LOGGING_ENABLED = os.getenv("LOGGING_ENABLED", "True").lower() in ("true", "1", "t")
 
-logging_level = os.getenv("LOGGING_LEVEL", "INFO").upper()
+logging_level = os.getenv("LOGGING_LEVEL", "INFO")
 logging_level = getattr(logging, logging_level, logging.DEBUG)
 
 logging.basicConfig(level=logging.WARNING)
@@ -36,28 +38,29 @@ class Logger:
 
     def init(self):
         self.logger = logging.getLogger("AgentGatewayLogger")
-        self.logger.setLevel(logging_level)
-        self.logger.propagate = False
+        self.logger.propagate = _determine_runtime()
+        self.logger.level = logging_level
 
         if not self.logger.handlers:
             self.file_handler = logging.FileHandler("logs.log", mode="a")
-            self.file_handler.setLevel(logging_level)  # Log all levels
-            self.stream_handler = logging.StreamHandler(sys.stdout)
-            self.stream_handler.setLevel(logging_level)
+            self.file_handler.level = logging_level
 
             formatter = logging.Formatter(
                 "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
             )
             self.file_handler.setFormatter(formatter)
-            self.stream_handler.setFormatter(formatter)
-
             self.logger.addHandler(self.file_handler)
-            self.logger.addHandler(self.stream_handler)
+
+            if not _determine_runtime():
+                self.stream_handler = logging.StreamHandler(sys.stdout)
+                self.stream_handler.level = logging_level
+                self.stream_handler.setFormatter(formatter)
+                self.logger.addHandler(self.stream_handler)
 
     def log(self, level, *args, block=False, **kwargs):
         if isinstance(level, str):
             level = getattr(logging, level.upper())
-        if LOGGING_ENABLED:
+        if LOGGING_ENABLED and level >= logging_level:
             if block:
                 self.logger.log(level, "=" * 80)
             for arg in args:
@@ -65,6 +68,16 @@ class Logger:
                     message = pprint.pformat(arg, **kwargs)
                 else:
                     message = str(arg, **kwargs)
+
+                # Use print if in runtime environment
+                if _determine_runtime():
+                    level_name = logging._levelToName.get(level, f"{level}")
+                    timestamp = logging.Formatter("%(asctime)s").format(
+                        logging.LogRecord("", 0, "", 0, "", (), None)
+                    )
+                    print(
+                        f"{timestamp} - AgentGatewayLogger - {level_name} - {message}"
+                    )
                 self.logger.log(level, message)
             if block:
                 self.logger.log(level, "=" * 80)
