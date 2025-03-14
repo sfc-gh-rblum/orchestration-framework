@@ -4,15 +4,15 @@ import asyncio
 import inspect
 import json
 import re
-from typing import Any, Type, Union, List, Dict
+from typing import Any, Dict, List, Type, Union
 
 from pydantic import BaseModel
 from snowflake.connector.connection import SnowflakeConnection
 from snowflake.snowpark import Session
 from snowflake.snowpark.functions import col
 
-from agent_gateway.tools.tools import Tool
 from agent_gateway.tools.logger import gateway_logger
+from agent_gateway.tools.tools import Tool
 from agent_gateway.tools.utils import (
     CortexEndpointBuilder,
     _get_connection,
@@ -75,10 +75,14 @@ class CortexSearchTool(Tool):
         gateway_logger.log("DEBUG", f"Cortex Search Response: {response_json}")
 
         try:
-            return {"output": response_json["results"],
-                     "sources": {"tool_type":"cortex_search",
-                                 "tool_name":self.name,
-                                 "metadata":citations}}
+            return {
+                "output": response_json["results"],
+                "sources": {
+                    "tool_type": "cortex_search",
+                    "tool_name": self.name,
+                    "metadata": citations,
+                },
+            }
         except KeyError:
             raise SnowflakeError(message=response_json.get("message", "Unknown error"))
 
@@ -107,8 +111,8 @@ class CortexSearchTool(Tool):
             for d in raw_response
         ]
 
-        if len(citation_elements[0].keys())<1:
-            return [{"Search Tool":self.service_name}]
+        if len(citation_elements[0].keys()) < 1:
+            return [{"Search Tool": self.service_name}]
 
         seen = set()
         citations = []
@@ -287,9 +291,11 @@ class CortexAnalystTool(Tool):
                         tables = self._extract_tables(sql_query)
                         return {
                             "output": str(table.to_pydict()),
-                            "sources": {"tool_type":"cortex_analyst",
-                                        "tool_name":self.name,
-                                        "metadata":tables},
+                            "sources": {
+                                "tool_type": "cortex_analyst",
+                                "tool_name": self.name,
+                                "metadata": tables,
+                            },
                         }
                     else:
                         raise SnowflakeError(
@@ -330,20 +336,19 @@ class CortexAnalystTool(Tool):
 
 
 class PythonTool(Tool):
-
     def __init__(
         self, python_func: callable, tool_description: str, output_description: str
     ) -> None:
-       self.python_callable = self.asyncify(python_func)
-       self.desc = self._generate_description(
+        self.python_callable = self.asyncify(python_func)
+        self.desc = self._generate_description(
             python_func=python_func,
             tool_description=tool_description,
             output_description=output_description,
         )
-       super().__init__(
+        super().__init__(
             name=python_func.__name__, func=self.python_callable, description=self.desc
         )
-       gateway_logger.log("INFO", "Python Tool successfully initialized")
+        gateway_logger.log("INFO", "Python Tool successfully initialized")
 
     def __call__(self, *args):
         return self.python_callable(*args)
@@ -355,9 +360,9 @@ class PythonTool(Tool):
             return {
                 "output": result,
                 "sources": {
-                    "tool_type":"custom_tool",
-                    "tool_name":sync_func.__name__,
-                    "metadata":None
+                    "tool_type": "custom_tool",
+                    "tool_name": sync_func.__name__,
+                    "metadata": None,
                 },
             }
 

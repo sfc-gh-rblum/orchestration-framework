@@ -11,9 +11,9 @@
 # limitations under the License.
 from __future__ import annotations
 
+import ast
 import asyncio
 import json
-import ast
 import re
 import threading
 from collections.abc import Sequence
