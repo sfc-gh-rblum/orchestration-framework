@@ -291,12 +291,11 @@ class CortexAnalystTool(Tool):
         self, response: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
         if response and isinstance(response, list):
+            gateway_logger.log("DEBUG", response)
+            sql_exists = any(item.get("type") == "sql" for item in response)
+
             for item in response:
-                if item["type"] == "suggestions":
-                    raise SnowflakeError(
-                        message=f"Your request is unclear. Consider rephrasing your request to one of the following suggestions: {item['suggestions']}"
-                    )
-                elif item["type"] == "sql":
+                if item["type"] == "sql":
                     sql_query = item["statement"]
                     table = (
                         self.connection.cursor().execute(sql_query).fetch_arrow_all()
@@ -312,13 +311,33 @@ class CortexAnalystTool(Tool):
                                 "metadata": tables,
                             },
                         }
-                    else:
-                        raise SnowflakeError(
-                            message="No results found. Consider rephrasing your request"
+                elif sql_exists:
+                    continue
+                else:
+                    try:
+                        response = (
+                            str(
+                                response[0]["text"]
+                                + " Consider rephrasing your request to one of the following:"
+                                + str(item["suggestions"])
+                            ),
+                        )
+                    except KeyError:
+                        response = str(
+                            response[0]["text"] + " Consider rephrasing your request"
                         )
 
+                    return {
+                        "output": response,
+                        "sources": {
+                            "tool_type": "cortex_analyst",
+                            "tool_name": self.name,
+                            "metadata": {"Table": None},
+                        },
+                    }
+
             raise SnowflakeError(
-                message=f"Unable to generate a valid SQL Query. {response[0]['text']}"
+                message=f"Unable to parse Cortex Analyst response: {response[0]['text']}"
             )
 
         raise SnowflakeError(message="Invalid Cortex Analyst Response")
