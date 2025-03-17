@@ -84,8 +84,11 @@ def _initialize_task_list(matches):
         index_mapping[task[1]] = str(current_index)
         updated_task = (task[0], str(current_index), task[2], task[3])
         new_matches.append(updated_task)
+        next_task_contains_ref = (
+            _check_ref(matches[i + 1][3]) if i + 1 < len(matches) else False
+        )
 
-        if "cortexsearch" in task[2] and i != len(matches) - 2:
+        if "cortexsearch" in task[2] and next_task_contains_ref:
             new_step = _create_summarization_step(task[3], current_index)
             new_matches.append(new_step)
             new_match_idx.append(new_step[1])
@@ -95,6 +98,15 @@ def _initialize_task_list(matches):
         current_index += 1
 
     return new_matches, index_mapping, new_match_idx
+
+
+def _check_ref(string):
+    try:
+        pattern = r"\$\d+"
+        match = re.search(pattern, string)
+        return bool(match)
+    except Exception:
+        return False
 
 
 def _create_summarization_step(context, index):
