@@ -83,7 +83,7 @@ class CortexSearchTool(Tool):
                 search_response = response_json["results"]
         except KeyError:
             raise SnowflakeError(
-                message=f"unable to parse Cortex Search response {search_response.get('message', 'Unknown error')}"
+                message=f"unable to parse Cortex Search response {response_json.get('message', 'Unknown error')}"
             )
 
         search_col = self._get_search_column(self.service_name)
@@ -148,12 +148,15 @@ class CortexSearchTool(Tool):
         )
 
     def _get_search_column(self, search_service_name: str) -> List[str]:
-        return self._get_search_service_attribute(search_service_name, "search_column")
-
-    def _get_search_attributes(self, search_service_name: str) -> List[str]:
-        return self._get_search_service_attribute(
-            search_service_name, "attribute_columns"
+        column = self._get_search_service_attribute(
+            search_service_name, "search_column"
         )
+        if column is not None:
+            return column
+        else:
+            raise SnowflakeError(
+                message="unable to identify index column in Cortex Search"
+            )
 
     def _get_search_service_attribute(
         self, search_service_name: str, attribute: str
@@ -164,9 +167,12 @@ class CortexSearchTool(Tool):
             .fetchall()
         )
         df = pd.DataFrame(df)
-        raw_atts = df.loc[df["name"] == search_service_name, attribute][0]
 
-        return raw_atts.split(",")
+        if not df.empty:
+            raw_atts = df.loc[df["name"] == search_service_name, attribute].iloc[0]
+            return raw_atts.split(",")
+        else:
+            return None
 
     def _get_search_table(self, search_service_name: str) -> str:
         df = (
@@ -175,8 +181,7 @@ class CortexSearchTool(Tool):
             .fetch_pandas_all()
         )
         df = pd.DataFrame(df)
-        table_def = df.loc[df["name"] == search_service_name, "definition"][0]
-
+        table_def = df.loc[df["name"] == search_service_name, "definition"].iloc[0]
         pattern = r"FROM\s+([\w\.]+)"
         match = re.search(pattern, table_def)
         return match[1] if match else "No match found."
