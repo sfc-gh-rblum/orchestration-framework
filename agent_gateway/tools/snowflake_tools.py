@@ -19,6 +19,7 @@ from agent_gateway.tools.utils import (
     _get_connection,
     post_cortex_request,
     _determine_runtime,
+    get_tag,
 )
 
 
@@ -57,6 +58,9 @@ class CortexSearchTool(Tool):
             name=tool_name, description=tool_description, func=self.asearch
         )
         self.connection = _get_connection(snowflake_connection)
+        self.connection.cursor().execute(
+            f"alter session set query_tag='{get_tag('CortexSearchTool')}'"
+        )
         self.k = k
         self.retrieval_columns = retrieval_columns
         self.service_name = service_name
@@ -212,6 +216,9 @@ class CortexAnalystTool(Tool):
 
         super().__init__(name=tname, func=self.asearch, description=tool_description)
         self.connection = _get_connection(snowflake_connection)
+        self.connection.cursor().execute(
+            f"alter session set query_tag='{get_tag('CortexAnalystTool')}'"
+        )
         self.FILE = semantic_model
         self.STAGE = stage
 
