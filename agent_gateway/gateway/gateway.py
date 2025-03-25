@@ -36,6 +36,8 @@ from agent_gateway.tools.utils import (
     _determine_runtime,
     post_cortex_request,
     get_tag,
+    set_logging,
+    _get_connection,
     _should_instrument,
     gateway_instrument,
 )
@@ -64,9 +66,15 @@ class CortexCompleteAgent:
     def __init__(self, session, llm) -> None:
         self.llm = llm
         self.session = session
-        self.session.connection.cursor().execute(
-            f"alter session set query_tag='{get_tag('CortexAnalystTool')}'"
-        )
+        try:
+            self.session.connection.cursor().execute(
+                f"CALL  set_query_tag('{get_tag('CortexAnalystTool')}')"
+            )
+        except Exception:
+            set_logging(_get_connection(self.session))
+            self.session.connection.cursor().execute(
+                f"CALL  set_query_tag('{get_tag('CortexAnalystTool')}')"
+            )
 
     async def arun(self, prompt: str) -> str:
         """Run the LLM."""
