@@ -15,7 +15,7 @@ import asyncio
 import inspect
 import json
 import re
-from typing import Any, Dict, List, Type, Union
+from typing import Any, Dict, List, Type, Union, ClassVar
 import pandas as pd
 
 from pydantic import BaseModel
@@ -33,6 +33,8 @@ from agent_gateway.tools.utils import (
     get_tag,
 )
 
+from agent_gateway.tools.utils import gateway_instrument
+
 
 class SnowflakeError(Exception):
     def __init__(self, message: str):
@@ -48,6 +50,7 @@ class CortexSearchTool(Tool):
     retrieval_columns: List[str] = []
     service_name: str = ""
     connection: Union[Session, SnowflakeConnection] = None
+    asearch: ClassVar[Any]
 
     def __init__(
         self,
@@ -65,9 +68,11 @@ class CortexSearchTool(Tool):
             service_topic=service_topic,
             data_source_description=data_description,
         )
-        super().__init__(
-            name=tool_name, description=tool_description, func=self.asearch
-        )
+
+        def search_call(query: str):
+            return self.asearch(query)
+
+        super().__init__(name=tool_name, description=tool_description, func=search_call)
         self.connection = _get_connection(snowflake_connection)
         self.connection.cursor().execute(
             f"alter session set query_tag='{get_tag('CortexSearchTool')}'"
@@ -77,9 +82,11 @@ class CortexSearchTool(Tool):
         self.service_name = service_name
         gateway_logger.log("INFO", "Cortex Search Tool successfully initialized")
 
-    def __call__(self, question: str) -> Any:
+    @gateway_instrument
+    def __call__(self, question) -> Any:
         return self.asearch(question)
 
+    @gateway_instrument
     async def asearch(self, query: str) -> Dict[str, Any]:
         gateway_logger.log("DEBUG", f"Cortex Search Query: {query}")
         headers, url, data = self._prepare_request(query=query)
@@ -213,6 +220,8 @@ class CortexAnalystTool(Tool):
     STAGE: str = ""
     FILE: str = ""
     connection: Union[Session, SnowflakeConnection] = None
+    asearch: ClassVar[Any]
+    _process_analyst_message: ClassVar[Any]
 
     def __init__(
         self,
@@ -230,7 +239,10 @@ class CortexAnalystTool(Tool):
             data_source_description=data_description,
         )
 
-        super().__init__(name=tname, func=self.asearch, description=tool_description)
+        def analyst_call(query: str):
+            return self.asearch(query)
+
+        super().__init__(name=tname, func=analyst_call, description=tool_description)
         self.connection = _get_connection(snowflake_connection)
         self.connection.cursor().execute(
             f"alter session set query_tag='{get_tag('CortexAnalystTool')}'"
@@ -243,8 +255,9 @@ class CortexAnalystTool(Tool):
     def __call__(self, prompt: str) -> Any:
         return self.asearch(query=prompt)
 
-    async def asearch(self, query: str) -> Dict[str, Any]:
-        gateway_logger.log("DEBUG", f"Cortex Analyst Prompt: {query}")
+    @gateway_instrument
+    async def asearch(self, query):
+        gateway_logger.log("DEBUG", f"Cortex Analyst Prompt:{query}")
 
         url, headers, data = self._prepare_analyst_request(prompt=query)
 
@@ -282,10 +295,9 @@ class CortexAnalystTool(Tool):
 
         return url, headers, data
 
-    def _process_analyst_message(
-        self, response: list[dict[str, Any]]
-    ) -> Dict[str, Any]:
-        if response and isinstance(response, list):
+    @gateway_instrument
+    def _process_analyst_message(self, response) -> Dict[str, Any]:
+        if isinstance(response, list) and len(response) > 0:
             gateway_logger.log("DEBUG", response)
             sql_exists = any(item.get("type") == "sql" for item in response)
 

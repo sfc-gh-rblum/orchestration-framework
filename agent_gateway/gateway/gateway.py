@@ -17,7 +17,7 @@ import json
 import re
 import threading
 from collections.abc import Sequence
-from typing import Any, Dict, List, Mapping, Optional, Union, cast
+from typing import Any, Dict, List, Mapping, Optional, Union, cast, ClassVar
 
 from snowflake.connector.connection import SnowflakeConnection
 from snowflake.snowpark import Session
@@ -36,7 +36,19 @@ from agent_gateway.tools.utils import (
     _determine_runtime,
     post_cortex_request,
     get_tag,
+    _should_instrument,
+    gateway_instrument,
 )
+
+from agent_gateway.tools.snowflake_tools import (
+    CortexAnalystTool,
+    PythonTool,
+    CortexSearchTool,
+)
+
+if _should_instrument():
+    from trulens.apps.custom import TruCustomApp
+    from trulens.core import TruSession
 
 
 class AgentGatewayError(Exception):
@@ -142,11 +154,18 @@ class Agent:
 
     input_key: str = "input"
     output_key: str = "output"
+    fuse: ClassVar[Any]
+    acall: ClassVar[Any]
+    handle_exception: ClassVar[Any]
+    run_async: ClassVar[Any]
+    search_tool: Optional[CortexSearchTool] = None
 
     def __init__(
         self,
         snowflake_connection: Union[Session, SnowflakeConnection],
-        tools: list[Union[Tool, StructuredTool]],
+        tools: list[
+            Union[Tool, StructuredTool, CortexAnalystTool, CortexSearchTool, PythonTool]
+        ],
         max_retries: int = 2,
         planner_llm: str = "mistral-large2",
         agent_llm: str = "mistral-large2",
@@ -181,8 +200,37 @@ class Agent:
             planner_stream: Whether to stream the planning.
 
         """
-        if not planner_example_prompt_replan:
-            planner_example_prompt_replan = planner_example_prompt
+
+        # hack to add tools to observability
+        def _unused_tool():
+            pass
+
+        self._search_tool_placeholder = CortexSearchTool(
+            service_name="",
+            service_topic="",
+            data_description="",
+            retrieval_columns="",
+            snowflake_connection=snowflake_connection,
+        )
+        self._analyst_tool_placeholder = CortexAnalystTool(
+            semantic_model="",
+            stage="",
+            service_topic="",
+            data_description="",
+            snowflake_connection=snowflake_connection,
+        )
+        self._python_tool_placeholder = PythonTool(
+            python_func=_unused_tool, tool_description="", output_description=""
+        )
+
+        self._planner_placheholder = Planner(
+            session="",
+            llm="",
+            example_prompt="",
+            example_prompt_replan="",
+            tools=[self._analyst_tool_placeholder],
+            stop=["stop"],
+        ).plan(inputs={}, is_replan=False)
 
         summarizer = SummarizationAgent(
             session=snowflake_connection, agent_llm=agent_llm
@@ -319,6 +367,7 @@ class Agent:
         formatted_contexts += "Current Plan:\n\n"
         return formatted_contexts
 
+    @gateway_instrument
     async def fuse(
         self, input_query: str, agent_scratchpad: str, is_final: bool
     ) -> str:
@@ -420,7 +469,8 @@ class Agent:
     def _call(self, inputs):
         return self.__call__(inputs)
 
-    def __call__(self, input: str):
+    @gateway_instrument
+    def __call__(self, input: str) -> Any:
         """Calls Cortex gateway multi-agent system.
 
         Params:
@@ -443,10 +493,12 @@ class Agent:
 
         return result[0]
 
+    @gateway_instrument
     def handle_exception(self, loop, context):
         loop.default_exception_handler(context)
         loop.stop()
 
+    @gateway_instrument
     def run_async(self, input, result, error):
         loop = asyncio.new_event_loop()
         loop.set_exception_handler(self.handle_exception)
@@ -474,6 +526,7 @@ class Agent:
             finally:
                 loop.close()
 
+    @gateway_instrument
     async def acall(
         self,
         input: str,
@@ -513,9 +566,6 @@ class Agent:
                 tasks = await self.planner.plan(
                     inputs=inputs,
                     is_replan=not is_first_iter,
-                    callbacks=(
-                        [self.planner_callback] if self.planner_callback else None
-                    ),
                 )
 
                 task_processor.set_tasks(tasks)
@@ -564,3 +614,28 @@ class Agent:
             }
         else:
             return {"output": answer, "sources": sources}
+
+
+if _should_instrument():
+
+    class TruAgent:
+        def __init__(
+            self, app_name, app_version, trulens_snowflake_connection, **kwargs
+        ):
+            self.agent = Agent(**kwargs)
+            self.tru_session = TruSession(connector=trulens_snowflake_connection)
+
+            self.tru_agent = TruCustomApp(
+                self.agent,
+                app_name=app_name,
+                app_version=app_version,
+            )
+
+        def __call__(self, input):
+            with self.tru_agent:
+                output = self.agent(input)
+
+            return output
+
+        async def acall(self, input):
+            return await self.agent.acall(input)
