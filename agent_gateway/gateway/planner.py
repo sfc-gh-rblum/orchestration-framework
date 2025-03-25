@@ -33,7 +33,6 @@ from agent_gateway.tools.base import StructuredTool, Tool
 from agent_gateway.tools.logger import gateway_logger
 from agent_gateway.tools.schema import Plan
 from agent_gateway.tools.utils import (
-    gateway_instrument,
     CortexEndpointBuilder,
     _determine_runtime,
     post_cortex_request,
@@ -176,7 +175,6 @@ class Planner:
         example_prompt: str,
         example_prompt_replan: str,
         tools: Sequence[Union[Tool, StructuredTool]],
-        stop: Optional[list[str]],
     ):
         self.llm = llm
         self.session = session
@@ -195,7 +193,6 @@ class Planner:
             is_replan=True,
         )
         self.output_parser = GatewayPlanParser(tools=tools)
-        self.stop = stop
 
     async def run_llm(
         self,
@@ -269,7 +266,6 @@ class Planner:
         gateway_logger.log("DEBUG", f"LLM Generated Plan:\n{completion}")
         return completion
 
-    @gateway_instrument
     async def plan(
         self, inputs: dict, is_replan: bool, **kwargs: Any
     ) -> dict[str, Task]:

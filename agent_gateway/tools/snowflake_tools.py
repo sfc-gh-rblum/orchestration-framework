@@ -23,8 +23,6 @@ from agent_gateway.tools.utils import (
     get_tag,
 )
 
-from agent_gateway.tools.utils import gateway_instrument
-
 
 class SnowflakeError(Exception):
     def __init__(self, message: str):
@@ -78,11 +76,9 @@ class CortexSearchTool(Tool):
         self.service_name = service_name
         gateway_logger.log("INFO", "Cortex Search Tool successfully initialized")
 
-    @gateway_instrument
     def __call__(self, question) -> Any:
         return self.asearch(question)
 
-    @gateway_instrument
     async def asearch(self, query: str) -> Dict[str, Any]:
         gateway_logger.log("DEBUG", f"Cortex Search Query: {query}")
         headers, url, data = self._prepare_request(query=query)
@@ -237,7 +233,7 @@ class CortexAnalystTool(Tool):
         )
 
         def analyst_call(query: str):
-            return self.asearch(query)
+            return self.query(query)
 
         super().__init__(name=tname, func=analyst_call, description=tool_description)
         self.connection = _get_connection(snowflake_connection)
@@ -262,10 +258,9 @@ class CortexAnalystTool(Tool):
                 prompt
                 + f" Only return up to {self.max_results} relevant records in the final results. "
             )
-        return self.asearch(query=prompt)
+        return self.query(query=prompt)
 
-    @gateway_instrument
-    async def asearch(self, query):
+    async def query(self, query):
         gateway_logger.log("DEBUG", f"Cortex Analyst Prompt:{query}")
 
         url, headers, data = self._prepare_analyst_request(prompt=query)
@@ -304,7 +299,6 @@ class CortexAnalystTool(Tool):
 
         return url, headers, data
 
-    @gateway_instrument
     def _process_analyst_message(self, response) -> Dict[str, Any]:
         if isinstance(response, list) and len(response) > 0:
             gateway_logger.log("DEBUG", response)
@@ -433,6 +427,7 @@ class PythonTool(Tool):
 class SQLTool(Tool):
     def __init__(
         self,
+        name: str,
         sql_query: str,
         connection: Union[Session, SnowflakeConnection],
         tool_description: str,
@@ -440,17 +435,18 @@ class SQLTool(Tool):
     ) -> None:
         self.connection = _get_connection(connection)
         self.sql_query = sql_query
+        self.name = name
         self.desc = self._generate_description(
             tool_description=tool_description,
             output_description=output_description,
         )
-        super().__init__(name="sql_tool", func=self.asearch, description=self.desc)
+        super().__init__(name=self.name, func=self.query, description=self.desc)
         gateway_logger.log("INFO", "SQL Tool successfully initialized")
 
     def __call__(self, *args):
-        return self.asearch(*args)
+        return self.query(*args)
 
-    async def asearch(self, *args):
+    async def query(self, *args):
         return await self._run_query()
 
     async def _run_query(self):
@@ -460,7 +456,7 @@ class SQLTool(Tool):
         return {
             "output": table,
             "sources": {
-                "tool_type": "sql_tool",
+                "tool_type": "SQL",
                 "tool_name": self.name,
                 "metadata": None,
             },
@@ -472,7 +468,7 @@ class SQLTool(Tool):
         output_description: str,
     ) -> str:
         return (
-            f"""sql_tool() -> str:\n"""
+            f"""{self.name}() -> str:\n"""
             f""" - Runs a SQL pipeline against source data to {tool_description}\n"""
             f""" - Returns {output_description}\n"""
         )

@@ -1,6 +1,6 @@
 [project]
 name = "orchestration-framework"
-version = "0.1.3"
+version = "1.0.0"
 requires-python = ">=3.9"
 description = "A multi-agent framework with native support for Snowflake services"
 authors = [
@@ -34,6 +34,7 @@ dev = [
     "pytest>=8.3.3,<9.0",
     "coverage>=7.6.9,<8.0",
     "ipython>=8.18.1",
+    "python-dotenv>=1.1.0",
 ]
 streamlit = [
     "streamlit>=1.39.0,<2.0",

@@ -17,7 +17,8 @@ import re
 import pytest
 
 from agent_gateway import Agent
-from agent_gateway.tools import CortexAnalystTool, CortexSearchTool, PythonTool
+from agent_gateway.tools import CortexAnalystTool, CortexSearchTool, PythonTool, SQLTool
+from tests.data.sql_response import SQL_RESPONSE
 
 
 @pytest.mark.parametrize(
@@ -79,6 +80,31 @@ def test_analyst_tool(session, question, answer):
     response = asyncio.run(sp500(question)).get("output")
 
     assert response == answer
+
+
+def test_sql_tool(session):
+    margin_query = """SELECT
+        LONGNAME,
+        MARKETCAP,
+        CASE
+            WHEN MARKETCAP > 0 THEN (EBITDA * 100.0) / MARKETCAP
+            ELSE NULL
+        END AS EBITDA_Margin_Percentage
+    FROM CUBE_TESTING.PUBLIC.SP500
+    LIMIT 3;"""
+
+    sql_config = {
+        "name": "margin_eval",
+        "sql_query": margin_query,
+        "connection": session,
+        "tool_description": "calculate EBITDA Margin (%) of S&p500 companies",
+        "output_description": "ebitda margin (%) metrics per company",
+    }
+
+    sql_tool = SQLTool(**sql_config)
+    response = asyncio.run(sql_tool())
+
+    assert SQL_RESPONSE == str(response)
 
 
 @pytest.mark.parametrize(
@@ -165,11 +191,34 @@ def test_gateway_agent(session, question, answer_contains):
         "output_description": "relevant articles",
         "python_func": get_news,
     }
+    margin_query = """SELECT
+        LONGNAME,
+        SECTOR,
+        INDUSTRY,
+        CURRENTPRICE,
+        MARKETCAP,
+        EBITDA,
+        CASE
+            WHEN MARKETCAP > 0 THEN (EBITDA * 100.0) / MARKETCAP
+            ELSE NULL
+        END AS EBITDA_Margin_Percentage
+    FROM CUBE_TESTING.PUBLIC.SP500;"""
+
+    sql_config = {
+        "name": "margin_eval",
+        "sql_query": margin_query,
+        "connection": session,
+        "tool_description": "calculate EBITDA Margin (%) of S&p500 companies",
+        "output_description": "ebitda margin (%) metrics per company",
+    }
+
     annual_reports = CortexSearchTool(**search_config)
     sp500 = CortexAnalystTool(**analyst_config)
     news_search = PythonTool(**python_config)
+    sql_tool = SQLTool(**sql_config)
     agent = Agent(
-        snowflake_connection=session, tools=[annual_reports, sp500, news_search]
+        snowflake_connection=session,
+        tools=[annual_reports, sp500, news_search, sql_tool],
     )
     response = agent(question).get("output")
     assert answer_contains in response
@@ -187,6 +236,11 @@ def test_gateway_agent(session, question, answer_contains):
             "When is Apple releasing a new chip?",
             "May 7",
             id="product_revenue",
+        ),
+        pytest.param(
+            "What is the EBITDA margin of Microsoft?",
+            " 4%",
+            id="ebitda_margin",
         ),
     ],
 )
@@ -216,12 +270,34 @@ def test_gateway_agent_without_memory(session, question, answer_contains):
         "output_description": "relevant articles",
         "python_func": get_news,
     }
+
+    margin_query = """SELECT
+        LONGNAME,
+        SECTOR,
+        INDUSTRY,
+        CURRENTPRICE,
+        MARKETCAP,
+        EBITDA,
+        CASE
+            WHEN MARKETCAP > 0 THEN (EBITDA * 100.0) / MARKETCAP
+            ELSE NULL
+        END AS EBITDA_Margin_Percentage
+    FROM CUBE_TESTING.PUBLIC.SP500;"""
+
+    sql_config = {
+        "name": "margin_eval",
+        "sql_query": margin_query,
+        "connection": session,
+        "tool_description": "calculate EBITDA Margin (%) of S&p500 companies",
+        "output_description": "ebitda margin (%) metrics per company",
+    }
     annual_reports = CortexSearchTool(**search_config)
     sp500 = CortexAnalystTool(**analyst_config)
     news_search = PythonTool(**python_config)
+    sql_tool = SQLTool(**sql_config)
     agent = Agent(
         snowflake_connection=session,
-        tools=[annual_reports, sp500, news_search],
+        tools=[annual_reports, sp500, news_search, sql_tool],
         memory=False,
     )
     response = agent(question).get("output")
