@@ -35,7 +35,7 @@ async def handle_options():
 
 # Snowflake connection parameters
 connection_parameters = {
-    "account": os.getenv("SNOWFLAKE_ACCOUNT"),
+    "account": "demo175.prod1.us-west-2.aws",
     "warehouse": os.getenv("SNOWFLAKE_WAREHOUSE"),
     "database": os.getenv("SNOWFLAKE_DATABASE"),
     "schema": os.getenv("SNOWFLAKE_SCHEMA"),

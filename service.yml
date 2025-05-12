@@ -1,26 +1,45 @@
-specification:
-  name: "agent-gateway-api"
-  version: 1
-  container:
-    image: "sfsenorthamerica-demo175/agent_gateway_api:latest"
-    memory: 2048
-    compute:
-      type: "STANDARD"
-      instances: 1
-    env:
-      SNOWFLAKE_ACCOUNT: "${SNOWFLAKE_ACCOUNT}"
-      SNOWFLAKE_DATABASE: "SPCS_OF"
-      SNOWFLAKE_SCHEMA: "SPCS_SCHEMA"
-      SNOWFLAKE_WAREHOUSE: "DEMO_COMPUTE_WH"
-      PORT: "8080"
-    endpoints:
-      - name: "api"
+spec:
+  containers:
+    - name: "agent-gateway-api"
+      image: "sfsenorthamerica-demo175.registry.snowflakecomputing.com/spcs_of/spcs_schema/agent_gateway_repo/flask-api:latest"
+      resources:
+        requests:
+          memory: "2048Mi"
+          cpu: "1"
+      env:
+        SNOWFLAKE_ACCOUNT: "${SNOWFLAKE_ACCOUNT}"
+        SNOWFLAKE_DATABASE: "SPCS_OF"
+        SNOWFLAKE_SCHEMA: "SPCS_SCHEMA"
+        SNOWFLAKE_WAREHOUSE: "DEMO_WH"
+        PORT: "8080"
+      secrets:
+        - snowflakeSecret:
+            objectName: "agent_gateway_secret"
+          envVarName: "SNOWFLAKE_USER"
+          secretKeyRef: "username"
+        - snowflakeSecret:
+            objectName: "agent_gateway_secret"
+          envVarName: "SNOWFLAKE_PASSWORD"
+          secretKeyRef: "password"
+      readinessProbe:
         port: 8080
-        public: true
-    healthcheck:
-      interval: 30
-      retries: 3
-      timeout: 5
+        path: "/health"
+  endpoints:
+    - name: "api"
       port: 8080
-      path: "/health"
-      protocol: "http"
+      public: true
+      protocol: "HTTP"
+      corsSettings:
+        Access-Control-Allow-Origin:
+          - "https://app.snowflake.com"
+          - "https://${SNOWFLAKE_ACCOUNT}.snowflakecomputing.com"
+        Access-Control-Allow-Methods:
+          - "GET"
+          - "POST"
+          - "PUT"
+          - "DELETE"
+          - "HEAD"
+          - "PATCH"
+        Access-Control-Allow-Headers:
+          - "Content-Type"
+          - "Authorization"

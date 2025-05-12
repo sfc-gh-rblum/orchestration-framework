@@ -1,0 +1,5 @@
+-- Create secret
+CREATE SECRET IF NOT EXISTS agent_gateway_secret
+  TYPE = GENERIC
+  USERNAME = CURRENT_USER()
+  PASSWORD = CURRENT_PASSWORD();
