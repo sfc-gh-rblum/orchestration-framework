@@ -1,5 +1,4 @@
-from quart import Quart, request
-from flask_cors import CORS
+from quart import Quart, request, jsonify, Response
 import os
 
 # import asyncio
@@ -14,7 +13,25 @@ load_dotenv()
 
 # Initialize Quart app
 app = Quart(__name__)
-CORS(app)
+
+
+# Enable CORS
+@app.after_request
+async def after_request(response: Response) -> Response:
+    headers = {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    }
+    for key, value in headers.items():
+        response.headers[key] = value
+    return response
+
+
+@app.route("/options", methods=["OPTIONS"])
+async def handle_options():
+    return "", 204
+
 
 # Snowflake connection parameters
 connection_parameters = {
@@ -90,15 +107,15 @@ agent = Agent(
 
 @app.route("/api/prompt", methods=["POST"])
 async def handle_prompt():
-    data = await request.get_json()
-    if not data or "prompt" not in data:
-        return {"message": "Invalid data - prompt is required"}, 400
-
-    prompt = data["prompt"]
     try:
+        data = await request.get_json()
+        if not data or "prompt" not in data:
+            return {"message": "Invalid data - prompt is required"}, 400
+
+        prompt = data["prompt"]
         # Use the agent to process the prompt
         response = await agent.acall(prompt)
-        return response, 200
+        return jsonify(response), 200
     except Exception as e:
         return {"message": f"Error processing prompt: {str(e)}"}, 500
 
@@ -110,5 +127,5 @@ async def health_check():
 
 
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 5000))
+    port = int(os.getenv("PORT", 8080))
     app.run(host="0.0.0.0", port=port)

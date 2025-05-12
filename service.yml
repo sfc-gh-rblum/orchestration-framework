@@ -1,0 +1,26 @@
+specification:
+  name: "agent-gateway-api"
+  version: 1
+  container:
+    image: "sfsenorthamerica-demo175/agent_gateway_api:latest"
+    memory: 2048
+    compute:
+      type: "STANDARD"
+      instances: 1
+    env:
+      SNOWFLAKE_ACCOUNT: "${SNOWFLAKE_ACCOUNT}"
+      SNOWFLAKE_DATABASE: "SPCS_OF"
+      SNOWFLAKE_SCHEMA: "SPCS_SCHEMA"
+      SNOWFLAKE_WAREHOUSE: "DEMO_COMPUTE_WH"
+      PORT: "8080"
+    endpoints:
+      - name: "api"
+        port: 8080
+        public: true
+    healthcheck:
+      interval: 30
+      retries: 3
+      timeout: 5
+      port: 8080
+      path: "/health"
+      protocol: "http"
