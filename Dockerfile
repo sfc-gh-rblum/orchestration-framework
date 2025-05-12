@@ -1,27 +1,25 @@
-FROM ghcr.io/astral-sh/uv:python3.11-bookworm-slim AS builder
-ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
-
-ENV UV_PYTHON_DOWNLOADS=0
+FROM python:3.11-slim-bookworm
 
 WORKDIR /app
 
-COPY pyproject.toml uv.lock ./
+# Install curl for healthcheck and clean up
+RUN apt-get update && \
+    apt-get install -y curl && \
+    rm -rf /var/lib/apt/lists/*
 
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-install-project --no-dev --extra streamlit
+# Copy requirements and install dependencies
+COPY flask_api/requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
 
+# Copy application code
 COPY . .
-
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --extra streamlit
-
-FROM python:3.11-slim-bookworm
-
-COPY --from=builder /app /app
 RUN chmod -R 755 /app
 
-ENV PATH="/app/.venv/bin:$PATH"
+WORKDIR /app/flask_api
 
-ENTRYPOINT []
+# Add healthcheck
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:5000/health || exit 1
 
-CMD ["python", "-m", "streamlit", "run", "/app/demo_app/demo_app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+# Use hypercorn for production deployment
+CMD ["hypercorn", "--bind", "0.0.0.0:5000", "--workers", "4", "app:app"]
