@@ -340,3 +340,10 @@ docs/docs_skeleton/yarn.lock
 
 # TruLens local database
 default.sqlite
+
+# secrets
+
+*.p8
+*.pub
+generateJWT.py
+access-via-keypair.py
