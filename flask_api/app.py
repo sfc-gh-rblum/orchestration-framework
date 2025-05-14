@@ -4,6 +4,8 @@ import os
 # import asyncio
 from dotenv import load_dotenv
 from snowflake.snowpark import Session
+
+os.environ["LOGGING_LEVEL"] = "DEBUG"
 from agent_gateway import Agent
 from agent_gateway.tools import CortexAnalystTool, CortexSearchTool, PythonTool
 import requests
@@ -115,6 +117,7 @@ async def handle_prompt():
         prompt = data["prompt"]
         # Use the agent to process the prompt
         response = await agent.acall(prompt)
+        # response = await analyst(prompt)
         return jsonify(response), 200
     except Exception as e:
         return {"message": f"Error processing prompt: {str(e)}"}, 500
