@@ -4,6 +4,7 @@ import os
 # import asyncio
 from dotenv import load_dotenv
 from snowflake.snowpark import Session
+import snowflake.connector
 
 os.environ["LOGGING_LEVEL"] = "DEBUG"
 from agent_gateway import Agent
@@ -98,12 +99,87 @@ async def handle_prompt():
         if not data or "prompt" not in data:
             return {"message": "Invalid data - prompt is required"}, 400
 
-        prompt = data["prompt"]
-        # Use the agent to process the prompt
-        response = await agent.acall(prompt)
-        # response = await analyst(prompt)
-        return jsonify(response), 200
+        # Get Snowflake connection parameters from headers
+        headers = dict(request.headers)
+        app.logger.info(f"Received headers: {headers}")
+
+        # Check if we have any Snowflake headers
+        has_snowflake_headers = any(
+            key.startswith("X-Snowflake-") for key in headers.keys()
+        )
+
+        if has_snowflake_headers:
+            # If we have Snowflake headers, validate them
+            required_headers = [
+                "X-Snowflake-Account",
+                "X-Snowflake-Host",
+                "Authorization",
+                "X-Snowflake-Warehouse",
+                "X-Snowflake-Database",
+                "X-Snowflake-Schema",
+            ]
+
+            missing_headers = [
+                header for header in required_headers if not headers.get(header)
+            ]
+            if missing_headers:
+                return {
+                    "error": f"Missing required headers: {', '.join(missing_headers)}",
+                    "required_headers": required_headers,
+                }, 400
+
+            try:
+                # Create Snowflake session
+                auth_header = headers.get("Authorization", "")
+                if not auth_header.startswith("Bearer "):
+                    return {
+                        "error": "Invalid Authorization header format. Must start with 'Bearer '"
+                    }, 400
+
+                token = auth_header.split("Bearer ")[1].strip('"')
+                session = snowflake.connector.connect(
+                    user=headers.get("X-Snowflake-User"),
+                    account=headers.get("X-Snowflake-Account").lower(),
+                    warehouse=headers.get("X-Snowflake-Warehouse"),
+                    database=headers.get("X-Snowflake-Database"),
+                    schema=headers.get("X-Snowflake-Schema"),
+                    authenticator="oauth",
+                    token=token,
+                    client_session_keep_alive=True,
+                )
+                app.logger.info("Successfully created Snowflake session")
+
+                # Execute the query
+                cursor = session.cursor()
+                cursor.execute("SELECT CURRENT_ACCOUNT()")
+                current_account = cursor.fetchone()[0]
+                app.logger.info(f"Connected to Snowflake account: {current_account}")
+
+                return jsonify({"message": "Success", "account": current_account})
+
+            except Exception as e:
+                app.logger.error(f"Error connecting to Snowflake: {str(e)}")
+                return jsonify({"error": str(e)}), 500
+        else:
+            # For local testing without Snowflake headers
+            try:
+                # Process the prompt using the agent
+                response = await agent.acall(data["prompt"])
+                return jsonify(
+                    {
+                        "message": "Success",
+                        "prompt": data["prompt"],
+                        "response": response["output"],
+                        "sources": response.get("sources"),
+                    }
+                )
+            except Exception as e:
+                app.logger.error(f"Error processing prompt: {str(e)}")
+                return jsonify({"error": str(e)}), 500
+
     except Exception as e:
+        app.logger.error(f"Error in handle_prompt: {str(e)}")
+        app.logger.exception("Full traceback:")
         return {"message": f"Error processing prompt: {str(e)}"}, 500
 
 
@@ -114,5 +190,5 @@ async def health_check():
 
 
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 8080))
+    port = int(os.getenv("PORT", 8081))
     app.run(host="0.0.0.0", port=port)
