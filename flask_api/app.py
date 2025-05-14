@@ -37,29 +37,13 @@ async def handle_options():
 
 # Snowflake connection parameters
 connection_parameters = {
-    "account": "demo175.prod1.us-west-2.aws",
+    "account": os.getenv("SNOWFLAKE_ACCOUNT", "demo175.prod1.us-west-2.aws"),
     "warehouse": os.getenv("SNOWFLAKE_WAREHOUSE"),
     "database": os.getenv("SNOWFLAKE_DATABASE"),
     "schema": os.getenv("SNOWFLAKE_SCHEMA"),
+    "user": os.getenv("SNOWFLAKE_USER"),
+    "password": os.getenv("SNOWFLAKE_PASSWORD"),
 }
-
-# Add user/password if not using OAuth
-if not os.getenv("SNOWFLAKE_HOST"):
-    connection_parameters.update(
-        {
-            "user": os.getenv("SNOWFLAKE_USER"),
-            "password": os.getenv("SNOWFLAKE_PASSWORD"),
-        }
-    )
-else:
-    connection_parameters.update(
-        {
-            "host": os.getenv("SNOWFLAKE_HOST"),
-            "authenticator": "oauth",
-        }
-    )
-    with open("/snowflake/session/token") as token_file:
-        connection_parameters["token"] = token_file.read()
 
 # Initialize Snowflake session
 snowpark = Session.builder.configs(connection_parameters).getOrCreate()
