@@ -345,5 +345,5 @@ default.sqlite
 
 *.p8
 *.pub
-generateJWT.py
+# generateJWT.py
 access-via-keypair.py

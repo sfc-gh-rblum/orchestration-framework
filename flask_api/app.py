@@ -24,7 +24,7 @@ async def after_request(response: Response) -> Response:
     headers = {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Snowflake-Account, X-Snowflake-Host, X-Snowflake-User, X-Snowflake-Warehouse, X-Snowflake-Database, X-Snowflake-Schema, X-Snowflake-Authorization-Token-Type",
     }
     for key, value in headers.items():
         response.headers[key] = value
