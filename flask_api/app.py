@@ -47,7 +47,13 @@ connection_parameters = {
 }
 
 # Initialize Snowflake session
-snowpark = Session.builder.configs(connection_parameters).getOrCreate()
+try:
+    snowpark = Session.builder.configs(connection_parameters).getOrCreate()
+    app.logger.info("Successfully created Snowflake session")
+except Exception as e:
+    app.logger.warning(f"Could not create Snowflake session: {str(e)}")
+    app.logger.warning("Running in local mode without Snowflake connection")
+    snowpark = None
 
 
 # Configure tools
@@ -80,15 +86,18 @@ analyst_config = {
 
 # Initialize tools
 crawler = PythonTool(**python_crawler_config)
-search = CortexSearchTool(**search_config)
-analyst = CortexAnalystTool(**analyst_config)
+tools = [crawler]
 
-snowflake_tools = [search, analyst, crawler]
+# Only add Snowflake tools if connection is available
+if snowpark is not None:
+    search = CortexSearchTool(**search_config)
+    analyst = CortexAnalystTool(**analyst_config)
+    tools.extend([search, analyst])
 
 # Initialize agent
 agent = Agent(
     snowflake_connection=snowpark,
-    tools=snowflake_tools,
+    tools=tools,
 )
 
 

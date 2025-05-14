@@ -7,20 +7,11 @@ spec:
           memory: "2048Mi"
           cpu: "1"
       env:
-        SNOWFLAKE_ACCOUNT: "${SNOWFLAKE_ACCOUNT}"
+        SNOWFLAKE_ACCOUNT: "sfsenorthamerica-demo175"
         SNOWFLAKE_DATABASE: "SPCS_OF"
         SNOWFLAKE_SCHEMA: "SPCS_SCHEMA"
         SNOWFLAKE_WAREHOUSE: "DEMO_WH"
         PORT: "8080"
-      secrets:
-        - snowflakeSecret:
-            objectName: "agent_gateway_secret"
-          envVarName: "SNOWFLAKE_USER"
-          secretKeyRef: "username"
-        - snowflakeSecret:
-            objectName: "agent_gateway_secret"
-          envVarName: "SNOWFLAKE_PASSWORD"
-          secretKeyRef: "password"
       readinessProbe:
         port: 8080
         path: "/health"
@@ -43,3 +34,9 @@ spec:
         Access-Control-Allow-Headers:
           - "Content-Type"
           - "Authorization"
+          - "X-Snowflake-Account"
+          - "X-Snowflake-Host"
+          - "X-Snowflake-User"
+          - "X-Snowflake-Warehouse"
+          - "X-Snowflake-Database"
+          - "X-Snowflake-Schema"
