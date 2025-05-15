@@ -1,27 +1,21 @@
-FROM ghcr.io/astral-sh/uv:python3.11-bookworm-slim AS builder
-ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
-
-ENV UV_PYTHON_DOWNLOADS=0
+FROM python:3.11-slim
 
 WORKDIR /app
 
-COPY pyproject.toml uv.lock ./
+# Copy requirements first to leverage Docker cache
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-install-project --no-dev --extra streamlit
-
+# Copy application code
 COPY . .
 
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --extra streamlit
+# Set environment variables
+ENV FLASK_APP=app.py
+ENV FLASK_ENV=production
+ENV PORT=5000
 
-FROM python:3.11-slim-bookworm
+# Expose the port the app runs on
+EXPOSE 5000
 
-COPY --from=builder /app /app
-RUN chmod -R 755 /app
-
-ENV PATH="/app/.venv/bin:$PATH"
-
-ENTRYPOINT []
-
-CMD ["python", "-m", "streamlit", "run", "/app/demo_app/demo_app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+# Run the application with Gunicorn
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--access-logfile", "-", "--error-logfile", "-", "app:app"]

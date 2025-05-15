@@ -219,3 +219,82 @@ You can `pip install orchestration-framework[trulens]` and use the TruAgent clas
 # Bug Reports, Feedback, or Other Questions
 
 - You can add issues to the GitHub or email Alejandro Herrera (alejandro.herrera@snowflake.com)
+
+# Agent Gateway Flask Application
+
+This Flask application is designed to run locally, in Docker containers, and on Snowflake SPCS. It includes comprehensive logging for Agent Gateway tools.
+
+## Local Development Setup
+
+1. Create a virtual environment:
+```bash
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
+
+2. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+3. Run the application:
+```bash
+python app.py
+```
+
+The application will be available at `http://localhost:5000`
+
+## Docker Setup
+
+1. Build the Docker image:
+```bash
+docker build -t agent-gateway-flask .
+```
+
+2. Run the container:
+```bash
+docker run -p 5000:5000 agent-gateway-flask
+```
+
+The application will be available at `http://localhost:5000`
+
+## Snowflake SPCS Deployment
+
+1. Ensure you have the Snowflake CLI installed and configured.
+
+2. Build and push the Docker image to your Snowflake registry:
+```bash
+# Tag the image for your Snowflake registry
+docker tag agent-gateway-flask <your-registry>/agent-gateway-flask:latest
+
+# Push to Snowflake registry
+docker push <your-registry>/agent-gateway-flask:latest
+```
+
+3. Deploy to SPCS using Snowflake's service deployment commands.
+
+## Environment Variables
+
+- `FLASK_ENV`: Set the Flask environment (development/production)
+- `PORT`: Port number for the application (default: 5000)
+
+## Logging
+
+The application uses structured logging with the following features:
+- JSON formatted logs
+- Timestamp in ISO format
+- Log levels
+- Stack traces for errors
+- Request context information
+
+## Endpoints
+
+- `/`: Home endpoint
+- `/health`: Health check endpoint
+
+## Monitoring
+
+All Agent Gateway tool logging will be visible in the container logs. You can view them:
+- Locally: In the terminal where the app is running
+- Docker: Using `docker logs <container_id>`
+- SPCS: Through Snowflake's logging interface
