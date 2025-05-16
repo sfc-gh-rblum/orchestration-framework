@@ -12,6 +12,7 @@ spec:
         SNOWFLAKE_DATABASE: "SPCS_OF"
         SNOWFLAKE_SCHEMA: "SPCS_SCHEMA"
         SNOWFLAKE_WAREHOUSE: "DEMO_WH"
+        SNOWFLAKE_ROLE: "ACCOUNTADMIN"
         PORT: "8080"
       secrets:
         - snowflakeSecret:
