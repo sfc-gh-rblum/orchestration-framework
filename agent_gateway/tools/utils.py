@@ -19,6 +19,7 @@ from textwrap import dedent
 from typing import TypedDict, Union
 from urllib.parse import urlunparse
 import importlib
+import os
 
 import aiohttp
 import pkg_resources
@@ -41,12 +42,24 @@ class Headers(TypedDict):
 
 
 def _determine_runtime():
+    """Determine if running in Snowflake environment."""
+    # Check for SPCS token file
+    if os.path.exists("/snowflake/session/token"):
+        return True
+
+    # Check for Snowflake stored proc module
     try:
         from _stored_proc_restful import StoredProcRestful  # noqa: F401
 
         return True
     except ImportError:
-        return False
+        pass
+
+    # Check for SPCS-specific environment variables
+    if os.getenv("SNOWFLAKE_HOST") and os.getenv("SNOWFLAKE_COMPUTE_POOL"):
+        return True
+
+    return False
 
 
 def _should_instrument():

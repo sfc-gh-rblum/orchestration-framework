@@ -6,6 +6,7 @@ from agent_gateway.tools import CortexSearchTool, CortexAnalystTool, SQLTool, Py
 from snowflake.snowpark import Session
 from dotenv import load_dotenv
 import requests
+from agent_gateway.tools.utils import _determine_runtime
 
 # Load environment variables
 load_dotenv()
@@ -30,43 +31,63 @@ logger = structlog.get_logger()
 def create_snowflake_session():
     """Create and verify Snowflake session."""
     try:
-        # Get Snowflake credentials from environment - no defaults
-        snowflake_config = {
-            "account": os.getenv("SNOWFLAKE_ACCOUNT"),
-            "user": os.getenv("SNOWFLAKE_USER"),
-            "password": os.getenv("SNOWFLAKE_PASSWORD"),
-            "role": os.getenv("SNOWFLAKE_ROLE"),  # Role from env without default
-            "warehouse": os.getenv("SNOWFLAKE_WAREHOUSE"),
-            "database": os.getenv("SNOWFLAKE_DATABASE"),
-            "schema": os.getenv("SNOWFLAKE_SCHEMA"),  # Schema from env without default
-        }
+        # Determine if running in SPCS
+        inside_snowflake = _determine_runtime()
+
+        if inside_snowflake:
+            # SPCS authentication
+            snowflake_config = {
+                "host": os.getenv("SNOWFLAKE_HOST"),
+                "account": os.getenv("SNOWFLAKE_ACCOUNT"),
+                "authenticator": "oauth",
+                "warehouse": os.getenv("SNOWFLAKE_WAREHOUSE"),
+                "database": os.getenv("SNOWFLAKE_DATABASE"),
+                "schema": os.getenv("SNOWFLAKE_SCHEMA"),
+            }
+            # Read token from SPCS mount
+            try:
+                with open("/snowflake/session/token", "r") as f:
+                    snowflake_config["token"] = f.read().strip()
+            except Exception as e:
+                logger.error("failed_to_read_token", error=str(e))
+                raise
+        else:
+            # Regular authentication
+            snowflake_config = {
+                "account": os.getenv("SNOWFLAKE_ACCOUNT"),
+                "user": os.getenv("SNOWFLAKE_USER"),
+                "password": os.getenv("SNOWFLAKE_PASSWORD"),
+                "role": os.getenv("SNOWFLAKE_ROLE"),
+                "warehouse": os.getenv("SNOWFLAKE_WAREHOUSE"),
+                "database": os.getenv("SNOWFLAKE_DATABASE"),
+                "schema": os.getenv("SNOWFLAKE_SCHEMA"),
+            }
 
         # Verify all required credentials are present
-        missing_configs = [k for k, v in snowflake_config.items() if not v]
+        required_configs = ["account", "warehouse", "database", "schema"]
+        if not inside_snowflake:
+            required_configs.extend(["user", "password", "role"])
+        else:
+            required_configs.extend(["host", "token"])
+
+        missing_configs = [
+            k
+            for k in required_configs
+            if k not in snowflake_config or not snowflake_config[k]
+        ]
         if missing_configs:
             raise ValueError(
                 f"Missing Snowflake configurations: {', '.join(missing_configs)}"
             )
 
         # Log connection attempt details (excluding sensitive info)
-        logger.info(
-            "attempting_snowflake_connection",
-            account=snowflake_config["account"],
-            user=snowflake_config["user"],
-            role=snowflake_config["role"],
-            warehouse=snowflake_config["warehouse"],
-            database=snowflake_config["database"],
-            schema=snowflake_config["schema"],
-        )
+        log_config = {
+            k: v for k, v in snowflake_config.items() if k not in ["password", "token"]
+        }
+        logger.info("attempting_snowflake_connection", **log_config)
 
         # Create Snowflake session
         session = Session.builder.configs(snowflake_config).create()
-
-        # Generate demo services
-        from agent_gateway.tools.utils import generate_demo_services
-
-        generate_demo_services(session)
-        logger.info("demo_services_generated")
 
         # Verify and log current session details
         current_session = session.sql(
@@ -114,14 +135,17 @@ def initialize_agent_gateway(session):
         }
 
         # First ensure we're in the right schema
-        session.use_schema("CUBE_TESTING.PUBLIC")
-        logger.info("using_demo_schema", schema="CUBE_TESTING.PUBLIC")
+        full_schema = (
+            f"{os.getenv('SNOWFLAKE_DATABASE')}.{os.getenv('SNOWFLAKE_SCHEMA')}"
+        )
+        session.use_schema(full_schema)
+        logger.info("using_schema", schema=full_schema)
 
         analyst_tool = CortexAnalystTool(**analyst_config)
         logger.info("analyst_tool_initialized")
 
         # Initialize SQL Tool for margin evaluation
-        sql_query = """WITH CompanyMetrics AS (
+        sql_query = f"""WITH CompanyMetrics AS (
             SELECT
                 LONGNAME,
                 SECTOR,
@@ -133,7 +157,7 @@ def initialize_agent_gateway(session):
                     WHEN MARKETCAP > 0 AND EBITDA IS NOT NULL THEN (EBITDA * 100.0) / MARKETCAP
                     ELSE NULL
                 END AS EBITDA_Margin
-            FROM CUBE_TESTING.PUBLIC.SP500
+            FROM {full_schema}.SP500
         ),
         AverageMetrics AS (
             SELECT
@@ -229,7 +253,8 @@ def health():
         "snowflake_connected": snowflake_session is not None,
         "agent_initialized": agent is not None,
     }
-    return jsonify(status)
+    status_code = 200 if status["status"] == "healthy" else 503
+    return jsonify(status), status_code
 
 
 @app.route("/api/prompt", methods=["POST"])
@@ -286,5 +311,5 @@ def process_prompt():
 
 
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=True)
+    port = int(os.getenv("PORT", 8080))
+    app.run(host="0.0.0.0", port=port)
