@@ -191,3 +191,9 @@ docs/docs_skeleton/yarn.lock
 
 # TruLens local database
 default.sqlite
+
+# access-via-keypair.py
+access-via-keypair.py.log
+generated-jwt.txt
+rsa_key.p8
+rsa_key.pub

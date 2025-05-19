@@ -1,0 +1,4 @@
+[connections]
+accountname = sfsenorthamerica-demo175
+username = rblum
+private_key_path = rsa_key.p8
