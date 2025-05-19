@@ -60,7 +60,7 @@ class Logger:
                 if isinstance(arg, dict):
                     message = pprint.pformat(arg, **kwargs)
                 else:
-                    message = str(arg, **kwargs)
+                    message = str(arg)
 
                 # Use print if in runtime environment
                 if _determine_runtime():
