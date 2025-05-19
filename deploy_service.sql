@@ -13,6 +13,7 @@ spec:
         SNOWFLAKE_SCHEMA: "SPCS_SCHEMA"
         SNOWFLAKE_WAREHOUSE: "DEMO_WH"
         SNOWFLAKE_ROLE: "ACCOUNTADMIN"
+        SNOWFLAKE_HOST: "sfsenorthamerica-demo175.snowflakecomputing.com"
         PORT: "8080"
       secrets:
         - snowflakeSecret:
