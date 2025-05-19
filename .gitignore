@@ -193,7 +193,7 @@ docs/docs_skeleton/yarn.lock
 default.sqlite
 
 # access-via-keypair.py
-access-via-keypair.py.log
-generated-jwt.txt
+access-via-keypair.py
+generateJWT.py
 rsa_key.p8
 rsa_key.pub
