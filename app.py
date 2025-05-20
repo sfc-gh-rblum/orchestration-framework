@@ -273,6 +273,10 @@ def initialize_agent_gateway(session):
     try:
         print("\n🛠️  Initializing Agent Gateway tools...")
 
+        # First ensure we're in the right schema
+        session.use_schema("SPCS_OF.SPCS_SCHEMA")
+        print("   🔄 Using schema: SPCS_OF.SPCS_SCHEMA")
+
         # Initialize Cortex Search Tool
         print("   📚 Setting up Cortex Search Tool...")
         search_config = {
@@ -296,11 +300,6 @@ def initialize_agent_gateway(session):
             "snowflake_connection": session,
             "max_results": 5,
         }
-
-        # First ensure we're in the right schema
-        session.use_schema("SPCS_OF.SPCS_SCHEMA")
-        print("   🔄 Using demo schema: SPCS_OF.SPCS_SCHEMA")
-
         analyst_tool = CortexAnalystTool(**analyst_config)
         print("   ✅ Cortex Analyst Tool ready")
 
@@ -318,7 +317,7 @@ def initialize_agent_gateway(session):
                     WHEN MARKETCAP > 0 AND EBITDA IS NOT NULL THEN (EBITDA * 100.0) / MARKETCAP
                     ELSE NULL
                 END AS EBITDA_Margin
-            FROM CSPCS_OF.SPCS_SCHEMA.SP500
+            FROM SPCS_OF.SPCS_SCHEMA.SP500
         ),
         AverageMetrics AS (
             SELECT
