@@ -9,6 +9,7 @@ import requests
 
 # Load environment variables
 load_dotenv()
+print("🔧 Starting application initialization...")
 
 # Configure structured logging
 structlog.configure(
@@ -25,63 +26,112 @@ structlog.configure(
 )
 
 logger = structlog.get_logger()
+print("📝 Logging configured")
+
+# Environment variables will be automatically populated by Snowflake in SPCS
+SNOWFLAKE_ACCOUNT = os.getenv("SNOWFLAKE_ACCOUNT")
+SNOWFLAKE_HOST = os.getenv("SNOWFLAKE_HOST")
+SNOWFLAKE_DATABASE = os.getenv("SNOWFLAKE_DATABASE")
+SNOWFLAKE_SCHEMA = os.getenv("SNOWFLAKE_SCHEMA")
+
+# Custom environment variables for local testing only
+SNOWFLAKE_USER = os.getenv("SNOWFLAKE_USER")
+SNOWFLAKE_PASSWORD = os.getenv("SNOWFLAKE_PASSWORD")
+SNOWFLAKE_ROLE = os.getenv("SNOWFLAKE_ROLE")
+SNOWFLAKE_WAREHOUSE = os.getenv("SNOWFLAKE_WAREHOUSE")
+
+# Print current environment details
+print("Account    : {}".format(SNOWFLAKE_ACCOUNT))
+print("User       : {}".format(SNOWFLAKE_USER))
+print("Host       : {}".format(SNOWFLAKE_HOST))
+print("Database   : {}".format(SNOWFLAKE_DATABASE))
+print("Schema     : {}".format(SNOWFLAKE_SCHEMA))
+print("Warehouse  : {}".format(SNOWFLAKE_WAREHOUSE))
+print("Directory  : {}".format(os.getcwd()))
+
+
+def get_login_token():
+    """
+    Read the login token supplied automatically by Snowflake in SPCS.
+    These tokens are short lived and should always be read right before creating any new connection.
+    """
+    try:
+        with open("/snowflake/session/token", "r") as f:
+            return f.read()
+    except FileNotFoundError:
+        return None
+
+
+def get_connection_params():
+    """
+    Construct Snowflake connection params from environment variables.
+    Uses OAuth token in SPCS, falls back to username/password for local development.
+    """
+    token = get_login_token()
+    if token:
+        print("🔑 Using OAuth token authentication")
+        return {
+            "account": SNOWFLAKE_ACCOUNT,
+            "host": SNOWFLAKE_HOST,
+            "authenticator": "oauth",
+            "token": token,
+            "warehouse": SNOWFLAKE_WAREHOUSE,
+            "database": SNOWFLAKE_DATABASE,
+            "schema": SNOWFLAKE_SCHEMA,
+            "role": SNOWFLAKE_ROLE,  # Add role parameter for OAuth
+            "insecure_mode": True,
+        }
+    else:
+        print("👤 Using username/password authentication")
+        return {
+            "account": SNOWFLAKE_ACCOUNT,
+            "host": SNOWFLAKE_HOST,
+            "user": SNOWFLAKE_USER,
+            "password": SNOWFLAKE_PASSWORD,
+            "role": SNOWFLAKE_ROLE,
+            "warehouse": SNOWFLAKE_WAREHOUSE,
+            "database": SNOWFLAKE_DATABASE,
+            "schema": SNOWFLAKE_SCHEMA,
+        }
 
 
 def create_snowflake_session():
     """Create and verify Snowflake session."""
     try:
-        # Get Snowflake credentials from environment - no defaults
-        snowflake_config = {
-            "account": os.getenv("SNOWFLAKE_ACCOUNT"),
-            "user": os.getenv("SNOWFLAKE_USER"),
-            "password": os.getenv("SNOWFLAKE_PASSWORD"),
-            "role": os.getenv("SNOWFLAKE_ROLE"),  # Role from env without default
-            "warehouse": os.getenv("SNOWFLAKE_WAREHOUSE"),
-            "database": os.getenv("SNOWFLAKE_DATABASE"),
-            "schema": os.getenv("SNOWFLAKE_SCHEMA"),  # Schema from env without default
-        }
-
-        # Verify all required credentials are present
-        missing_configs = [k for k, v in snowflake_config.items() if not v]
-        if missing_configs:
-            raise ValueError(
-                f"Missing Snowflake configurations: {', '.join(missing_configs)}"
-            )
-
-        # Log connection attempt details (excluding sensitive info)
-        logger.info(
-            "attempting_snowflake_connection",
-            account=snowflake_config["account"],
-            user=snowflake_config["user"],
-            role=snowflake_config["role"],
-            warehouse=snowflake_config["warehouse"],
-            database=snowflake_config["database"],
-            schema=snowflake_config["schema"],
-        )
+        print("❄️  Initializing Snowflake connection...")
 
         # Create Snowflake session
-        session = Session.builder.configs(snowflake_config).create()
+        session = Session.builder.configs(get_connection_params()).create()
+        session.sql_simplifier_enabled = True
+
+        # Verify connection and get version info
+        snowflake_environment = session.sql(
+            "select current_user(), current_version()"
+        ).collect()
+        print("Snowflake version: {}".format(snowflake_environment[0][1]))
+        print("Current user: {}".format(snowflake_environment[0][0]))
 
         # Generate demo services
         from agent_gateway.tools.utils import generate_demo_services
 
+        print("🔄 Generating demo services...")
         generate_demo_services(session)
-        logger.info("demo_services_generated")
+        print("✅ Demo services generated")
 
         # Verify and log current session details
         current_session = session.sql(
             "SELECT CURRENT_ROLE(), CURRENT_WAREHOUSE(), CURRENT_DATABASE(), CURRENT_SCHEMA()"
         ).collect()
-        logger.info(
-            "snowflake_connection_successful",
-            role=current_session[0][0],
-            warehouse=current_session[0][1],
-            database=current_session[0][2],
-            schema=current_session[0][3],
-        )
+        print("✨ Connected to Snowflake successfully!")
+        print(f"   Role: {current_session[0][0]}")
+        print(f"   Warehouse: {current_session[0][1]}")
+        print(f"   Database: {current_session[0][2]}")
+        print(f"   Schema: {current_session[0][3]}")
+
         return session
 
     except Exception as e:
+        print(f"❌ Snowflake connection failed: {str(e)}")
         logger.error(
             "snowflake_connection_failed", error=str(e), error_type=type(e).__name__
         )
@@ -91,7 +141,10 @@ def create_snowflake_session():
 def initialize_agent_gateway(session):
     """Initialize Agent Gateway with Snowflake-based tools."""
     try:
+        print("\n🛠️  Initializing Agent Gateway tools...")
+
         # Initialize Cortex Search Tool
+        print("   📚 Setting up Cortex Search Tool...")
         search_config = {
             "service_name": "SEC_SEARCH_SERVICE",
             "service_topic": "Snowflake's business,product offerings,and performance",
@@ -101,9 +154,10 @@ def initialize_agent_gateway(session):
             "k": 10,
         }
         search_tool = CortexSearchTool(**search_config)
-        logger.info("search_tool_initialized")
+        print("   ✅ Cortex Search Tool ready")
 
         # Initialize Cortex Analyst Tool
+        print("   📊 Setting up Cortex Analyst Tool...")
         analyst_config = {
             "semantic_model": "sp500_semantic_model.yaml",
             "stage": "ANALYST",
@@ -115,12 +169,13 @@ def initialize_agent_gateway(session):
 
         # First ensure we're in the right schema
         session.use_schema("CUBE_TESTING.PUBLIC")
-        logger.info("using_demo_schema", schema="CUBE_TESTING.PUBLIC")
+        print("   🔄 Using demo schema: CUBE_TESTING.PUBLIC")
 
         analyst_tool = CortexAnalystTool(**analyst_config)
-        logger.info("analyst_tool_initialized")
+        print("   ✅ Cortex Analyst Tool ready")
 
         # Initialize SQL Tool for margin evaluation
+        print("   💾 Setting up SQL Tool...")
         sql_query = """WITH CompanyMetrics AS (
             SELECT
                 LONGNAME,
@@ -175,9 +230,11 @@ def initialize_agent_gateway(session):
             "output_description": "EBITDA Margin %",
         }
         sql_tool = SQLTool(**sql_tool_config)
-        logger.info("sql_tool_initialized")
+        print("   ✅ SQL Tool ready")
 
         # Initialize Python Tool for web crawling
+        print("   🌐 Setting up Web Crawler Tool...")
+
         def html_crawl(url):
             response = requests.get(url)
             return response.text
@@ -188,18 +245,20 @@ def initialize_agent_gateway(session):
             "python_func": html_crawl,
         }
         web_crawler = PythonTool(**python_crawler_config)
-        logger.info("python_tool_initialized")
+        print("   ✅ Web Crawler Tool ready")
 
         # Initialize Agent with all tools
+        print("\n🤖 Initializing Agent with all tools...")
         agent = Agent(
             snowflake_connection=session,
             tools=[search_tool, analyst_tool, sql_tool, web_crawler],
             max_retries=3,
         )
-        logger.info("agent_gateway_initialized")
+        print("✨ Agent Gateway initialization complete!")
         return agent
 
     except Exception as e:
+        print(f"❌ Agent Gateway initialization failed: {str(e)}")
         logger.error(
             "agent_gateway_initialization_failed",
             error=str(e),
@@ -210,12 +269,14 @@ def initialize_agent_gateway(session):
 
 # Initialize Flask app
 app = Flask(__name__)
+print("\n🌟 Starting Flask application...")
 
 # Initialize Snowflake session and Agent Gateway
 try:
     snowflake_session = create_snowflake_session()
     agent = initialize_agent_gateway(snowflake_session)
 except Exception as e:
+    print(f"❌ Initialization failed: {str(e)}")
     logger.error("initialization_failed", error=str(e), error_type=type(e).__name__)
     snowflake_session = None
     agent = None
@@ -253,6 +314,9 @@ def process_prompt():
             "processing_prompt", message="Starting prompt processing", prompt=prompt
         )
 
+        # Get a fresh session for this request
+        # session = create_snowflake_session()
+
         # Process prompt through Agent Gateway with detailed logging
         try:
             response = agent(prompt)
@@ -286,5 +350,7 @@ def process_prompt():
 
 
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 5000))
+    port = int(os.getenv("PORT", 8080))
+    print(f"\n🚀 Starting server on port {port}...")
+    print("📡 Server is ready to accept connections!")
     app.run(host="0.0.0.0", port=port, debug=True)

@@ -1,7 +1,9 @@
 flask==3.0.2
-gunicorn==21.2.0
-python-dotenv==1.0.1
+python-dotenv>=1.1.0
 snowflake-connector-python>=3.14.0,<4.0.0
 structlog==24.1.0
 orchestration-framework
 snowflake-snowpark-python>=1.31.1
+requests>=2.31.0
+fastmcp>=2.3.4
+ipython>=8.18.1

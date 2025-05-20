@@ -20,7 +20,7 @@ RUN pip install -e .
 # Expose the port the app runs on
 EXPOSE 8080
 
-# Environment variables for production
+# Declare required environment variables
 ENV FLASK_APP=app.py \
     PORT=8080 \
     FLASK_ENV=production \
@@ -28,16 +28,26 @@ ENV FLASK_APP=app.py \
 
 # Create a script to validate environment variables and start the application
 RUN echo '#!/bin/sh\n\
+echo "🔍 Checking required Snowflake environment variables..."\n\
 required_vars="SNOWFLAKE_HOST SNOWFLAKE_ACCOUNT SNOWFLAKE_USER SNOWFLAKE_PASSWORD SNOWFLAKE_ROLE SNOWFLAKE_WAREHOUSE SNOWFLAKE_DATABASE SNOWFLAKE_SCHEMA"\n\
+missing_vars=""\n\
 for var in $required_vars; do\n\
   if [ -z "$(eval echo \$$var)" ]; then\n\
-    echo "Error: Required environment variable $var is not set"\n\
-    exit 1\n\
+    missing_vars="$missing_vars\\n  - $var"\n\
   fi\n\
 done\n\
 \n\
-exec gunicorn --bind 0.0.0.0:8080 --workers 4 --timeout 120 app:app' > /app/docker-entrypoint.sh \
+if [ ! -z "$missing_vars" ]; then\n\
+  echo "❌ Error: Missing required Snowflake environment variables:$missing_vars"\n\
+  echo "\nPlease provide these environment variables when running the container:"\n\
+  echo "docker run -e SNOWFLAKE_HOST=<value> -e SNOWFLAKE_ACCOUNT=<value> ... <image-name>"\n\
+  exit 1\n\
+fi\n\
+\n\
+echo "✅ All required environment variables are set"\n\
+echo "🚀 Starting Flask application..."\n\
+exec python app.py' > /app/docker-entrypoint.sh \
     && chmod +x /app/docker-entrypoint.sh
 
-# Run the application with Gunicorn
+# Run the application
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
