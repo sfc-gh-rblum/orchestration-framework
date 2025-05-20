@@ -298,8 +298,8 @@ def initialize_agent_gateway(session):
         }
 
         # First ensure we're in the right schema
-        session.use_schema("CUBE_TESTING.PUBLIC")
-        print("   🔄 Using demo schema: CUBE_TESTING.PUBLIC")
+        session.use_schema("SPCS_OF.SPCS_SCHEMA")
+        print("   🔄 Using demo schema: SPCS_OF.SPCS_SCHEMA")
 
         analyst_tool = CortexAnalystTool(**analyst_config)
         print("   ✅ Cortex Analyst Tool ready")
@@ -318,7 +318,7 @@ def initialize_agent_gateway(session):
                     WHEN MARKETCAP > 0 AND EBITDA IS NOT NULL THEN (EBITDA * 100.0) / MARKETCAP
                     ELSE NULL
                 END AS EBITDA_Margin
-            FROM CUBE_TESTING.PUBLIC.SP500
+            FROM CSPCS_OF.SPCS_SCHEMA.SP500
         ),
         AverageMetrics AS (
             SELECT
