@@ -6,6 +6,9 @@ from agent_gateway.tools import CortexSearchTool, CortexAnalystTool, SQLTool, Py
 from snowflake.snowpark import Session
 from dotenv import load_dotenv
 import requests
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.serialization import load_pem_private_key
+from cryptography.hazmat.backends import default_backend
 
 # Load environment variables
 load_dotenv()
@@ -33,12 +36,14 @@ SNOWFLAKE_ACCOUNT = os.getenv("SNOWFLAKE_ACCOUNT")
 SNOWFLAKE_HOST = os.getenv("SNOWFLAKE_HOST")
 SNOWFLAKE_DATABASE = os.getenv("SNOWFLAKE_DATABASE")
 SNOWFLAKE_SCHEMA = os.getenv("SNOWFLAKE_SCHEMA")
+SNOWFLAKE_ROLE = os.getenv("SNOWFLAKE_ROLE")
+SNOWFLAKE_WAREHOUSE = os.getenv("SNOWFLAKE_WAREHOUSE")
+
+# Use the provided host directly - it's already in the correct format
+HOST = SNOWFLAKE_HOST
 
 # Custom environment variables for local testing only
 SNOWFLAKE_USER = os.getenv("SNOWFLAKE_USER")
-SNOWFLAKE_PASSWORD = os.getenv("SNOWFLAKE_PASSWORD")
-SNOWFLAKE_ROLE = os.getenv("SNOWFLAKE_ROLE")
-SNOWFLAKE_WAREHOUSE = os.getenv("SNOWFLAKE_WAREHOUSE")
 
 # Print current environment details
 print("Account    : {}".format(SNOWFLAKE_ACCOUNT))
@@ -57,7 +62,7 @@ def get_login_token():
     """
     try:
         with open("/snowflake/session/token", "r") as f:
-            return f.read()
+            return f.read().strip()
     except FileNotFoundError:
         return None
 
@@ -65,34 +70,92 @@ def get_login_token():
 def get_connection_params():
     """
     Construct Snowflake connection params from environment variables.
-    Uses OAuth token in SPCS, falls back to username/password for local development.
+    Uses OAuth authentication in containers (SPCS), with JWT as fallback.
     """
-    token = get_login_token()
-    if token:
-        print("🔑 Using OAuth token authentication")
+    try:
+        # Check for OAuth token first (standard in SPCS)
+        oauth_token = get_login_token()
+        if oauth_token:
+            # Validate the token format - basic check for JWT structure (header.payload.signature)
+            token_parts = oauth_token.strip().split(".")
+            if len(token_parts) == 3:
+                print("🔑 Using OAuth authentication")
+                return {
+                    "authenticator": "oauth",
+                    "token": oauth_token,
+                    "account": SNOWFLAKE_ACCOUNT,
+                    "host": HOST,
+                    "warehouse": SNOWFLAKE_WAREHOUSE,
+                    "database": SNOWFLAKE_DATABASE,
+                    "schema": SNOWFLAKE_SCHEMA,
+                    "role": SNOWFLAKE_ROLE,
+                    "client_session_keep_alive": True,
+                    "application": "SPCS_AGENT_GATEWAY",
+                    "retry_on_error": True,
+                    "max_connection_retries": 3,
+                    "session_parameters": {
+                        "PYTHON_CONNECTOR_QUERY_RESULT_FORMAT": "json",
+                        "TIMEZONE": "UTC",
+                        "CLIENT_SESSION_KEEP_ALIVE": True,
+                        "CLIENT_PREFETCH_THREADS": 4,
+                    },
+                }
+            else:
+                print(
+                    "⚠️  Found OAuth token but it appears invalid, falling back to JWT"
+                )
+
+        # Fallback to JWT if OAuth token not available or invalid
+        print("ℹ️  Using JWT authentication")
+        with open("rsa_key.p8", "rb") as key:
+            pem_data = key.read()
+
+        # Convert PEM to DER format
+        private_key = load_pem_private_key(
+            pem_data, password=None, backend=default_backend()
+        )
+        der_data = private_key.private_bytes(
+            encoding=serialization.Encoding.DER,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+
+        if not HOST:
+            print("❌ Could not construct host URL")
+            raise ValueError("SNOWFLAKE_HOST and SNOWFLAKE_ACCOUNT are required")
+
+        print(f"🔗 Using host: {HOST}")
+        print("🔑 Using JWT authentication with DER format key")
+
         return {
+            "authenticator": "SNOWFLAKE_JWT",
             "account": SNOWFLAKE_ACCOUNT,
-            "host": SNOWFLAKE_HOST,
-            "authenticator": "oauth",
-            "token": token,
-            "warehouse": SNOWFLAKE_WAREHOUSE,
-            "database": SNOWFLAKE_DATABASE,
-            "schema": SNOWFLAKE_SCHEMA,
-            "role": SNOWFLAKE_ROLE,  # Add role parameter for OAuth
-            "insecure_mode": True,
-        }
-    else:
-        print("👤 Using username/password authentication")
-        return {
-            "account": SNOWFLAKE_ACCOUNT,
-            "host": SNOWFLAKE_HOST,
+            "host": HOST,
             "user": SNOWFLAKE_USER,
-            "password": SNOWFLAKE_PASSWORD,
-            "role": SNOWFLAKE_ROLE,
+            "private_key": der_data,
             "warehouse": SNOWFLAKE_WAREHOUSE,
             "database": SNOWFLAKE_DATABASE,
             "schema": SNOWFLAKE_SCHEMA,
+            "role": SNOWFLAKE_ROLE,
+            "client_session_keep_alive": True,
+            "application": "SPCS_AGENT_GATEWAY",
+            "retry_on_error": True,
+            "max_connection_retries": 3,
+            "session_parameters": {
+                "PYTHON_CONNECTOR_QUERY_RESULT_FORMAT": "json",
+                "TIMEZONE": "UTC",
+                "CLIENT_SESSION_KEEP_ALIVE": True,
+                "CLIENT_PREFETCH_THREADS": 4,
+            },
         }
+    except FileNotFoundError:
+        print("❌ Private key file not found")
+        raise ValueError(
+            "Private key file (rsa_key.p8) is required for JWT authentication"
+        )
+    except Exception as e:
+        print(f"❌ Error reading private key: {str(e)}")
+        raise
 
 
 def create_snowflake_session():
@@ -100,40 +163,107 @@ def create_snowflake_session():
     try:
         print("❄️  Initializing Snowflake connection...")
 
-        # Create Snowflake session
-        session = Session.builder.configs(get_connection_params()).create()
+        # Get connection parameters and log them (excluding sensitive info)
+        conn_params = get_connection_params()
+        debug_params = conn_params.copy()
+        sensitive_keys = ["password", "token", "private_key"]
+        for key in sensitive_keys:
+            if key in debug_params:
+                debug_params[key] = "***"
+        print(f"Connection parameters: {debug_params}")
+
+        # Create Snowflake session with explicit error handling
+        try:
+            print("🔄 Creating session with Snowflake...")
+            session = Session.builder.configs(conn_params).create()
+            print("✅ Session builder created successfully")
+        except Exception as session_error:
+            error_msg = str(session_error)
+            print(f"❌ Failed to create session: {error_msg}")
+
+            # Add more detailed error logging
+            if "Could not connect to Snowflake backend" in error_msg:
+                print("🔍 Connection timeout - possible causes:")
+                print("   - Network connectivity issues")
+                print("   - Firewall blocking connection")
+                print("   - Invalid account URL format")
+                print("   - JWT token generation failure")
+            elif "JWT" in error_msg:
+                print("🔍 JWT authentication error - possible causes:")
+                print("   - Invalid private key format")
+                print("   - Key pair mismatch")
+                print("   - User not configured for JWT auth")
+
+            logger.error(
+                "session_creation_failed",
+                error=error_msg,
+                error_type=type(session_error).__name__,
+                account_url=conn_params.get("account"),
+            )
+            raise
+
         session.sql_simplifier_enabled = True
 
-        # Verify connection and get version info
-        snowflake_environment = session.sql(
-            "select current_user(), current_version()"
-        ).collect()
-        print("Snowflake version: {}".format(snowflake_environment[0][1]))
-        print("Current user: {}".format(snowflake_environment[0][0]))
+        # Verify connection and get version info with explicit error handling
+        try:
+            snowflake_environment = session.sql(
+                "select current_user(), current_version()"
+            ).collect()
+            print("Snowflake version: {}".format(snowflake_environment[0][1]))
+            print("Current user: {}".format(snowflake_environment[0][0]))
+        except Exception as version_error:
+            print(f"❌ Failed to get version info: {str(version_error)}")
+            logger.error(
+                "version_check_failed",
+                error=str(version_error),
+                error_type=type(version_error).__name__,
+            )
+            raise
 
         # Generate demo services
-        from agent_gateway.tools.utils import generate_demo_services
+        try:
+            from agent_gateway.tools.utils import generate_demo_services
 
-        print("🔄 Generating demo services...")
-        generate_demo_services(session)
-        print("✅ Demo services generated")
+            print("🔄 Generating demo services...")
+            generate_demo_services(session)
+            print("✅ Demo services generated")
+        except Exception as demo_error:
+            print(f"❌ Failed to generate demo services: {str(demo_error)}")
+            logger.error(
+                "demo_services_failed",
+                error=str(demo_error),
+                error_type=type(demo_error).__name__,
+            )
+            raise
 
         # Verify and log current session details
-        current_session = session.sql(
-            "SELECT CURRENT_ROLE(), CURRENT_WAREHOUSE(), CURRENT_DATABASE(), CURRENT_SCHEMA()"
-        ).collect()
-        print("✨ Connected to Snowflake successfully!")
-        print(f"   Role: {current_session[0][0]}")
-        print(f"   Warehouse: {current_session[0][1]}")
-        print(f"   Database: {current_session[0][2]}")
-        print(f"   Schema: {current_session[0][3]}")
+        try:
+            current_session = session.sql(
+                "SELECT CURRENT_ROLE(), CURRENT_WAREHOUSE(), CURRENT_DATABASE(), CURRENT_SCHEMA()"
+            ).collect()
+            print("✨ Connected to Snowflake successfully!")
+            print(f"   Role: {current_session[0][0]}")
+            print(f"   Warehouse: {current_session[0][1]}")
+            print(f"   Database: {current_session[0][2]}")
+            print(f"   Schema: {current_session[0][3]}")
+        except Exception as session_info_error:
+            print(f"❌ Failed to get session info: {str(session_info_error)}")
+            logger.error(
+                "session_info_failed",
+                error=str(session_info_error),
+                error_type=type(session_info_error).__name__,
+            )
+            raise
 
         return session
 
     except Exception as e:
         print(f"❌ Snowflake connection failed: {str(e)}")
         logger.error(
-            "snowflake_connection_failed", error=str(e), error_type=type(e).__name__
+            "snowflake_connection_failed",
+            error=str(e),
+            error_type=type(e).__name__,
+            connection_params=debug_params,
         )
         raise
 

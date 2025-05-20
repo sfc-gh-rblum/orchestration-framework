@@ -7,3 +7,4 @@ snowflake-snowpark-python>=1.31.1
 requests>=2.31.0
 fastmcp>=2.3.4
 ipython>=8.18.1
+cryptography>=42.0.0

@@ -29,7 +29,7 @@ ENV FLASK_APP=app.py \
 # Create a script to validate environment variables and start the application
 RUN echo '#!/bin/sh\n\
 echo "🔍 Checking required Snowflake environment variables..."\n\
-required_vars="SNOWFLAKE_HOST SNOWFLAKE_ACCOUNT SNOWFLAKE_USER SNOWFLAKE_PASSWORD SNOWFLAKE_ROLE SNOWFLAKE_WAREHOUSE SNOWFLAKE_DATABASE SNOWFLAKE_SCHEMA"\n\
+required_vars="SNOWFLAKE_HOST SNOWFLAKE_ACCOUNT SNOWFLAKE_USER SNOWFLAKE_ROLE SNOWFLAKE_WAREHOUSE SNOWFLAKE_DATABASE SNOWFLAKE_SCHEMA"\n\
 missing_vars=""\n\
 for var in $required_vars; do\n\
   if [ -z "$(eval echo \$$var)" ]; then\n\
@@ -42,6 +42,15 @@ if [ ! -z "$missing_vars" ]; then\n\
   echo "\nPlease provide these environment variables when running the container:"\n\
   echo "docker run -e SNOWFLAKE_HOST=<value> -e SNOWFLAKE_ACCOUNT=<value> ... <image-name>"\n\
   exit 1\n\
+fi\n\
+\n\
+# Check for OAuth token in SPCS environment\n\
+if [ -f "/snowflake/session/token" ]; then\n\
+  echo "✅ Found OAuth token for authentication"\n\
+elif [ -f "/app/rsa_key.p8" ]; then\n\
+  echo "✅ Found private key for JWT authentication"\n\
+else\n\
+  echo "⚠️  Warning: No OAuth token or private key found. Authentication may fail."\n\
 fi\n\
 \n\
 echo "✅ All required environment variables are set"\n\
