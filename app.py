@@ -7,6 +7,8 @@ from snowflake.snowpark import Session
 from dotenv import load_dotenv
 import requests
 from agent_gateway.tools.utils import _determine_runtime
+import jwt
+from functools import wraps
 
 # Load environment variables
 load_dotenv()
@@ -26,6 +28,46 @@ structlog.configure(
 )
 
 logger = structlog.get_logger()
+
+
+def validate_jwt(request):
+    """Validate JWT token from request headers."""
+    auth_header = request.headers.get("Authorization")
+    if not auth_header:
+        return False, "No Authorization header"
+
+    try:
+        # Extract token from "Snowflake Token=\"<token>\"" format
+        if 'Snowflake Token="' in auth_header:
+            token = auth_header.split('Snowflake Token="')[1].rstrip('"')
+        else:
+            token = auth_header.split("Bearer ")[1]
+
+        # Load public key for verification
+        with open("rsa_key.pub", "r") as f:
+            public_key = f.read()
+
+        # Verify the token
+        jwt.decode(token, public_key, algorithms=["RS256"])
+        return True, None
+    except Exception as e:
+        logger.error("jwt_validation_failed", error=str(e))
+        return False, str(e)
+
+
+def require_jwt(f):
+    """Decorator to require JWT authentication."""
+
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        is_valid, error = validate_jwt(request)
+        if not is_valid:
+            return jsonify(
+                {"status": "error", "message": f"Authentication failed: {error}"}
+            ), 401
+        return f(*args, **kwargs)
+
+    return decorated_function
 
 
 def create_snowflake_session():
@@ -246,6 +288,7 @@ except Exception as e:
 
 
 @app.route("/health")
+@require_jwt
 def health():
     """Health check endpoint."""
     status = {
@@ -258,6 +301,7 @@ def health():
 
 
 @app.route("/api/prompt", methods=["POST"])
+@require_jwt
 def process_prompt():
     """Process prompts through the Agent Gateway."""
     if not agent or not snowflake_session:
