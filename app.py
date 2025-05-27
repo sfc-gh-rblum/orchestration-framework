@@ -314,10 +314,12 @@ def process_prompt():
 
     try:
         data = request.get_json()
-        if not data or "prompt" not in data:
-            return jsonify({"status": "error", "message": "No prompt provided"}), 400
+        # if not data or "prompt" not in data:
+        #     return jsonify({"status": "error", "message": "No prompt provided"}), 400
 
         prompt = data["prompt"]
+        # prompt = data["data"][0][1]
+
         logger.info(
             "processing_prompt", message="Starting prompt processing", prompt=prompt
         )
